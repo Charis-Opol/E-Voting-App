@@ -14,7 +14,7 @@ Classes:
     SearchVoters     — searches voters by name, card number, national id, or station
 """
 
-from storage import JsonStore
+from Backend.storage import JsonStore
 
 
 # ── Shared store ─────────────────────────────────────────────────────────────
