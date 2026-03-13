@@ -12,7 +12,7 @@ class UI:
 
         self.header("E-VOTING SYSTEM")
 
-        print("1. Login as Admin")
+        print("1. Login as Administrator")
         print("2. Login as Voter")
         print("3. Register as Voter")
         print("4. Exit")
