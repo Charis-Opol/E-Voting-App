@@ -20,3 +20,17 @@
 ### Things to add 
 - Restriction to numbers, dates of birth, etc.
 - Common variable names
+
+
+### SOLID Principles to use
+- Encapsulation
+- Invariants
+- Compostion
+- Single Responsibility Principle
+- Open/Closed principle
+
+### Clean Code Principles to use
+- Clear and Meaningful names
+- Clear structure and avoid complexity
+- Small and focused functions
+- Testability and make them easy to modify 
