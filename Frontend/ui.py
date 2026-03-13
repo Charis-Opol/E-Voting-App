@@ -1,114 +1,119 @@
 """
-ui.py
-
-Shared UI helpers for the E-Voting console application.
-Every screen in the app uses these functions for a consistent look-and-feel.
+ui.py - Shared UI helpers matching the original e_voting_console_app.py exactly.
 """
-
-from colors import (
-    RESET, BOLD, DIM, ITALIC, GRAY,
-    RED, GREEN, YELLOW, CYAN, BRIGHT_CYAN,
-    BRIGHT_GREEN, BRIGHT_YELLOW, BRIGHT_WHITE,
-    BG_GREEN, BLACK,
-)
-
-import os, sys
+import sys
+import os
+from colors import *
 
 
-class UI:
-    """Reusable terminal UI primitives."""
+def colored(text, color):
+    return f"{color}{text}{RESET}"
 
-    # ── Screen control ────────────────────────────────────────────────────
 
-    @staticmethod
-    def clear_screen():
-        os.system("cls" if os.name == "nt" else "clear")
+def header(title, theme_color):
+    width = 58
+    top = f"  {theme_color}{'═' * width}{RESET}"
+    mid = f"  {theme_color}{BOLD} {title.center(width - 2)} {RESET}{theme_color} {RESET}"
+    bot = f"  {theme_color}{'═' * width}{RESET}"
+    print(top)
+    print(mid)
+    print(bot)
 
-    @staticmethod
-    def pause():
-        input(f"\n  {DIM}Press Enter to continue...{RESET}")
 
-    # ── Headers ───────────────────────────────────────────────────────────
+def subheader(title, theme_color):
+    print(f"\n  {theme_color}{BOLD}▸ {title}{RESET}")
 
-    @staticmethod
-    def header(title, theme_color=BRIGHT_CYAN):
-        width = 60
-        print(f"\n  {theme_color}{BOLD}{'═' * width}{RESET}")
-        print(f"  {theme_color}{BOLD}{title.center(width)}{RESET}")
-        print(f"  {theme_color}{BOLD}{'═' * width}{RESET}")
 
-    @staticmethod
-    def subheader(title, theme_color=YELLOW):
-        print(f"\n  {theme_color}{BOLD}── {title} ──{RESET}")
+def table_header(format_str, theme_color):
+    print(f"  {theme_color}{BOLD}{format_str}{RESET}")
 
-    # ── Formatted output ──────────────────────────────────────────────────
 
-    @staticmethod
-    def table_header(format_str, theme_color=BRIGHT_GREEN):
-        print(f"  {theme_color}{BOLD}{format_str}{RESET}")
+def table_divider(width, theme_color):
+    print(f"  {theme_color}{'─' * width}{RESET}")
 
-    @staticmethod
-    def table_divider(width=70, theme_color=BRIGHT_GREEN):
-        print(f"  {theme_color}{'─' * width}{RESET}")
 
-    @staticmethod
-    def status_badge(text, is_good):
-        if is_good:
-            return f"{GREEN}{BOLD}{text}{RESET}"
-        return f"{RED}{BOLD}{text}{RESET}"
+def error(msg):
+    print(f"  {RED}{BOLD} {msg}{RESET}")
 
-    # ── Menu helpers ──────────────────────────────────────────────────────
 
-    @staticmethod
-    def menu_item(number, text, color=BRIGHT_CYAN):
-        print(f"  {color}{BOLD}{number}.{RESET} {text}")
+def success(msg):
+    print(f"  {GREEN}{BOLD} {msg}{RESET}")
 
-    # ── Input helpers ─────────────────────────────────────────────────────
 
-    @staticmethod
-    def prompt(text):
-        return input(f"  {BRIGHT_CYAN}▸{RESET} {text}").strip()
+def warning(msg):
+    print(f"  {YELLOW}{BOLD} {msg}{RESET}")
 
-    @staticmethod
-    def get_input(message):
-        return input(message).strip()
 
-    @staticmethod
-    def masked_input(prompt_text="Password: "):
-        """Cross-platform password input with masking."""
+def info(msg):
+    print(f"  {GRAY}{msg}{RESET}")
+
+
+def menu_item(number, text, color):
+    print(f"  {color}{BOLD}{number:>3}.{RESET}  {text}")
+
+
+def status_badge(text, is_good):
+    if is_good:
+        return f"{GREEN}{text}{RESET}"
+    return f"{RED}{text}{RESET}"
+
+
+def prompt(text):
+    return input(f"  {BRIGHT_WHITE}{text}{RESET}").strip()
+
+
+def masked_input(prompt_text="Password: "):
+    print(f"  {BRIGHT_WHITE}{prompt_text}{RESET}", end="", flush=True)
+    password = ""
+    if sys.platform == "win32":
+        import msvcrt
+        while True:
+            ch = msvcrt.getwch()
+            if ch == "\r" or ch == "\n":
+                print()
+                break
+            elif ch == "\x08" or ch == "\b":
+                if len(password) > 0:
+                    password = password[:-1]
+                    sys.stdout.write("\b \b")
+                    sys.stdout.flush()
+            elif ch == "\x03":
+                raise KeyboardInterrupt
+            else:
+                password += ch
+                sys.stdout.write(f"{YELLOW}*{RESET}")
+                sys.stdout.flush()
+    else:
+        import tty
+        import termios
+        fd = sys.stdin.fileno()
+        old_settings = termios.tcgetattr(fd)
         try:
-            import getpass
-            return getpass.getpass(f"  {BRIGHT_CYAN}▸{RESET} {prompt_text}")
-        except Exception:
-            return input(f"  {BRIGHT_CYAN}▸{RESET} {prompt_text}")
+            tty.setraw(fd)
+            while True:
+                ch = sys.stdin.read(1)
+                if ch == "\r" or ch == "\n":
+                    print()
+                    break
+                elif ch == "\x7f" or ch == "\x08":
+                    if len(password) > 0:
+                        password = password[:-1]
+                        sys.stdout.write("\b \b")
+                        sys.stdout.flush()
+                elif ch == "\x03":
+                    raise KeyboardInterrupt
+                else:
+                    password += ch
+                    sys.stdout.write(f"{YELLOW}*{RESET}")
+                    sys.stdout.flush()
+        finally:
+            termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+    return password
 
-    # ── Messages ──────────────────────────────────────────────────────────
 
-    @staticmethod
-    def success(msg):
-        print(f"  {GREEN}{BOLD}✓{RESET} {GREEN}{msg}{RESET}")
+def clear_screen():
+    os.system('cls' if os.name == 'nt' else 'clear')
 
-    @staticmethod
-    def error(msg):
-        print(f"  {RED}{BOLD}✗{RESET} {RED}{msg}{RESET}")
 
-    @staticmethod
-    def warning(msg):
-        print(f"  {YELLOW}{BOLD}⚠{RESET} {YELLOW}{msg}{RESET}")
-
-    @staticmethod
-    def info(msg):
-        print(f"  {CYAN}ℹ {msg}{RESET}")
-
-    # ── Login menu ────────────────────────────────────────────────────────
-
-    def show_login_menu(self):
-        from colors import THEME_LOGIN
-        self.clear_screen()
-        self.header("E-VOTING SYSTEM", THEME_LOGIN)
-        print()
-        self.menu_item(1, "Login as Admin", THEME_LOGIN)
-        self.menu_item(2, "Login as Voter", THEME_LOGIN)
-        self.menu_item(3, "Register as Voter", THEME_LOGIN)
-        self.menu_item(4, "Exit", THEME_LOGIN)
-        print()
+def pause():
+    input(f"\n  {DIM}Press Enter to continue...{RESET}")
