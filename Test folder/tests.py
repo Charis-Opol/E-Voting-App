@@ -19,16 +19,16 @@ TEST_DATA_DIRECTORY = "test_data"
 def _point_all_stores_at_test_data() -> None:
     """Reset every singleton store to point at the test data folder."""
     from Backend.storage import JsonStore
-    import Backend.polls as polls, Backend.voters as voters, Backend.admins as admins, Backend.audits as audits
+    import Backend.polls_management as polls_management, Backend.voters_management as voters_management, Backend.admin_management as admin_management, Backend.audits as audits
 
-    polls.PollStore._instance   = JsonStore(f"{TEST_DATA_DIRECTORY}/polls.json")
-    voters.VoterStore._instance = JsonStore(f"{TEST_DATA_DIRECTORY}/voters.json")
-    admins.AdminStore._instance = JsonStore(f"{TEST_DATA_DIRECTORY}/admins.json")
+    polls_management.PollStore._instance   = JsonStore(f"{TEST_DATA_DIRECTORY}/polls.json")
+    voters_management.VoterStore._instance = JsonStore(f"{TEST_DATA_DIRECTORY}/voters.json")
+    admin_management.AdminStore._instance = JsonStore(f"{TEST_DATA_DIRECTORY}/admins.json")
     audits.AuditStore._instance = JsonStore(f"{TEST_DATA_DIRECTORY}/audits.json")
 
 
 def _seed_admin(role: str = "super_admin") -> dict:
-    from Backend.admins import AdminStore, hash_password
+    from Backend.admin_management import AdminStore, hash_password
     return AdminStore.get().insert({
         "username":      "testadmin",
         "password_hash": hash_password("password123"),
@@ -41,7 +41,7 @@ def _seed_admin(role: str = "super_admin") -> dict:
 
 
 def _seed_voter(is_verified: bool = False, is_active: bool = True) -> dict:
-    from Backend.voters import VoterStore
+    from Backend.voters_management import VoterStore
     return VoterStore.get().insert({
         "full_name":          "Alice Nakato",
         "national_id":        "NID001",
@@ -53,7 +53,7 @@ def _seed_voter(is_verified: bool = False, is_active: bool = True) -> dict:
 
 
 def _seed_poll(status: str = "draft", total_votes: int = 0) -> dict:
-    from Backend.polls import PollStore
+    from Backend.polls_management import PollStore
     return PollStore.get().insert({
         "title":         "Test Election",
         "description":   "A test poll",
@@ -151,7 +151,7 @@ def test_store_delete_removes_the_record():
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def test_create_poll_stores_it_with_draft_status():
-    from Backend.polls import CreatePoll, GetAllPolls
+    from Backend.polls_management import CreatePoll, GetAllPolls
     CreatePoll("admin").execute(
         title="Election 2026",
         description="General election",
@@ -167,7 +167,7 @@ def test_create_poll_stores_it_with_draft_status():
 
 
 def test_create_poll_with_empty_title_raises_error():
-    from Backend.polls import CreatePoll
+    from Backend.polls_management import CreatePoll
     expect_raises(ValueError, lambda: CreatePoll("admin").execute(
         title="", description="", election_type="General",
         start_date="2026-06-01", end_date="2026-06-30",
@@ -176,7 +176,7 @@ def test_create_poll_with_empty_title_raises_error():
 
 
 def test_create_poll_with_end_before_start_raises_error():
-    from Backend.polls import CreatePoll
+    from Backend.polls_management import CreatePoll
     expect_raises(ValueError, lambda: CreatePoll("admin").execute(
         title="Test", description="", election_type="General",
         start_date="2026-06-30", end_date="2026-06-01",
@@ -186,45 +186,45 @@ def test_create_poll_with_end_before_start_raises_error():
 
 
 def test_update_poll_changes_the_title():
-    from Backend.polls import UpdatePoll
+    from Backend.polls_management import UpdatePoll
     seeded_poll  = _seed_poll()
     updated_poll = UpdatePoll().execute(seeded_poll["id"], {"title": "New Title"})
     assert updated_poll["title"] == "New Title"
 
 
 def test_update_open_poll_raises_error():
-    from Backend.polls import UpdatePoll
+    from Backend.polls_management import UpdatePoll
     open_poll = _seed_poll(status="open")
     expect_raises(ValueError, lambda: UpdatePoll().execute(open_poll["id"], {"title": "X"}))
 
 
 def test_update_closed_poll_with_votes_raises_error():
-    from Backend.polls import UpdatePoll
+    from Backend.polls_management import UpdatePoll
     closed_poll_with_votes = _seed_poll(status="closed", total_votes=5)
     expect_raises(ValueError, lambda: UpdatePoll().execute(closed_poll_with_votes["id"], {"title": "X"}))
 
 
 def test_delete_draft_poll_removes_it():
-    from Backend.polls import DeletePoll, GetAllPolls
+    from Backend.polls_management import DeletePoll, GetAllPolls
     seeded_poll = _seed_poll()
     DeletePoll().execute(seeded_poll["id"])
     assert GetAllPolls().execute() == []
 
 
 def test_delete_open_poll_raises_error():
-    from Backend.polls import DeletePoll
+    from Backend.polls_management import DeletePoll
     open_poll = _seed_poll(status="open")
     expect_raises(ValueError, lambda: DeletePoll().execute(open_poll["id"]))
 
 
 def test_open_poll_without_candidates_raises_error():
-    from Backend.polls import OpenPoll
+    from Backend.polls_management import OpenPoll
     poll_with_no_candidates = _seed_poll()
     expect_raises(ValueError, lambda: OpenPoll().execute(poll_with_no_candidates["id"]))
 
 
 def test_open_poll_with_candidates_sets_status_to_open():
-    from Backend.polls import OpenPoll, PollStore
+    from Backend.polls_management import OpenPoll, PollStore
     poll_with_candidates = PollStore.get().insert({
         "title": "Test", "description": "", "election_type": "General",
         "start_date": "2026-06-01", "end_date": "2026-06-30",
@@ -240,20 +240,20 @@ def test_open_poll_with_candidates_sets_status_to_open():
 
 
 def test_close_open_poll_sets_status_to_closed():
-    from Backend.polls import ClosePoll
+    from Backend.polls_management import ClosePoll
     open_poll    = _seed_poll(status="open")
     closed_poll  = ClosePoll().execute(open_poll["id"])
     assert closed_poll["status"] == "closed"
 
 
 def test_close_draft_poll_raises_error():
-    from Backend.polls import ClosePoll
+    from Backend.polls_management import ClosePoll
     draft_poll = _seed_poll(status="draft")
     expect_raises(ValueError, lambda: ClosePoll().execute(draft_poll["id"]))
 
 
 def test_assign_candidates_skips_ineligible_ids():
-    from Backend.polls import AssignCandidates
+    from Backend.polls_management import AssignCandidates
     seeded_poll         = _seed_poll()
     eligible_ids        = {1, 2, 3}
     result_poll         = AssignCandidates(eligible_ids).execute(seeded_poll["id"], 0, [1, 2, 99])
@@ -266,25 +266,25 @@ def test_assign_candidates_skips_ineligible_ids():
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def test_get_all_voters_returns_empty_list_when_none_exist():
-    from Backend.voters import GetAllVoters
+    from Backend.voters_management import GetAllVoters
     assert GetAllVoters().execute() == []
 
 
 def test_verify_voter_sets_is_verified_to_true():
-    from Backend.voters import VerifyVoter
+    from Backend.voters_management import VerifyVoter
     unverified_voter = _seed_voter(is_verified=False)
     verified_voter   = VerifyVoter().execute(unverified_voter["id"])
     assert verified_voter["is_verified"] is True
 
 
 def test_verify_already_verified_voter_raises_error():
-    from Backend.voters import VerifyVoter
+    from Backend.voters_management import VerifyVoter
     already_verified_voter = _seed_voter(is_verified=True)
     expect_raises(ValueError, lambda: VerifyVoter().execute(already_verified_voter["id"]))
 
 
 def test_verify_all_voters_returns_count_of_voters_changed():
-    from Backend.voters import VerifyAllVoters, VoterStore
+    from Backend.voters_management import VerifyAllVoters, VoterStore
     VoterStore.get().insert({
         "full_name": "Bob", "national_id": "N1",
         "voter_card_number": "C1", "station_id": 1,
@@ -300,34 +300,34 @@ def test_verify_all_voters_returns_count_of_voters_changed():
 
 
 def test_deactivate_voter_sets_is_active_to_false():
-    from Backend.voters import DeactivateVoter
+    from Backend.voters_management import DeactivateVoter
     active_voter      = _seed_voter(is_active=True)
     deactivated_voter = DeactivateVoter().execute(active_voter["id"])
     assert deactivated_voter["is_active"] is False
 
 
 def test_deactivate_already_inactive_voter_raises_error():
-    from Backend.voters import DeactivateVoter
+    from Backend.voters_management import DeactivateVoter
     inactive_voter = _seed_voter(is_active=False)
     expect_raises(ValueError, lambda: DeactivateVoter().execute(inactive_voter["id"]))
 
 
 def test_search_voters_by_name_returns_matching_voter():
-    from Backend.voters import SearchVoters
+    from Backend.voters_management import SearchVoters
     _seed_voter()   # full_name = "Alice Nakato"
     search_results = SearchVoters().execute("name", "alice")
     assert len(search_results) == 1
 
 
 def test_search_voters_by_card_number_returns_matching_voter():
-    from Backend.voters import SearchVoters
+    from Backend.voters_management import SearchVoters
     _seed_voter()   # voter_card_number = "VC001"
     search_results = SearchVoters().execute("card", "VC001")
     assert len(search_results) == 1
 
 
 def test_search_voters_with_unknown_field_raises_error():
-    from Backend.voters import SearchVoters
+    from Backend.voters_management import SearchVoters
     expect_raises(ValueError, lambda: SearchVoters().execute("email", "test@test.com"))
 
 
@@ -336,25 +336,25 @@ def test_search_voters_with_unknown_field_raises_error():
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def test_authenticate_admin_with_correct_credentials_returns_admin():
-    from Backend.admins import AuthenticateAdmin
+    from Backend.admin_management import AuthenticateAdmin
     _seed_admin()
     returned_admin = AuthenticateAdmin().execute("testadmin", "password123")
     assert returned_admin["username"] == "testadmin"
 
 
 def test_authenticate_admin_with_wrong_password_raises_error():
-    from Backend.admins import AuthenticateAdmin
+    from Backend.admin_management import AuthenticateAdmin
     _seed_admin()
     expect_raises(ValueError, lambda: AuthenticateAdmin().execute("testadmin", "wrongpassword"))
 
 
 def test_authenticate_nonexistent_admin_raises_error():
-    from Backend.admins import AuthenticateAdmin
+    from Backend.admin_management import AuthenticateAdmin
     expect_raises(ValueError, lambda: AuthenticateAdmin().execute("nobody", "anypassword"))
 
 
 def test_create_admin_as_super_admin_succeeds():
-    from Backend.admins import CreateAdmin, GetAllAdmins
+    from Backend.admin_management import CreateAdmin, GetAllAdmins
     super_admin = _seed_admin(role="super_admin")
     CreateAdmin(super_admin).execute(
         username="officer1", plain_text_password="securepass",
@@ -365,7 +365,7 @@ def test_create_admin_as_super_admin_succeeds():
 
 
 def test_create_admin_as_non_super_admin_raises_permission_error():
-    from Backend.admins import CreateAdmin
+    from Backend.admin_management import CreateAdmin
     election_officer = _seed_admin(role="election_officer")
     expect_raises(PermissionError, lambda: CreateAdmin(election_officer).execute(
         username="newuser", plain_text_password="securepass",
@@ -374,7 +374,7 @@ def test_create_admin_as_non_super_admin_raises_permission_error():
 
 
 def test_create_admin_with_duplicate_username_raises_error():
-    from Backend.admins import CreateAdmin
+    from Backend.admin_management import CreateAdmin
     super_admin = _seed_admin(role="super_admin")
     expect_raises(ValueError, lambda: CreateAdmin(super_admin).execute(
         username="testadmin",  # already exists
@@ -384,7 +384,7 @@ def test_create_admin_with_duplicate_username_raises_error():
 
 
 def test_create_admin_with_short_password_raises_error():
-    from Backend.admins import CreateAdmin
+    from Backend.admin_management import CreateAdmin
     super_admin = _seed_admin(role="super_admin")
     expect_raises(ValueError, lambda: CreateAdmin(super_admin).execute(
         username="newuser", plain_text_password="123",
@@ -393,7 +393,7 @@ def test_create_admin_with_short_password_raises_error():
 
 
 def test_create_admin_with_invalid_role_raises_error():
-    from Backend.admins import CreateAdmin
+    from Backend.admin_management import CreateAdmin
     super_admin = _seed_admin(role="super_admin")
     expect_raises(ValueError, lambda: CreateAdmin(super_admin).execute(
         username="newuser", plain_text_password="securepass",
@@ -402,7 +402,7 @@ def test_create_admin_with_invalid_role_raises_error():
 
 
 def test_deactivate_admin_sets_is_active_to_false():
-    from Backend.admins import CreateAdmin, DeactivateAdmin, GetAdmin
+    from Backend.admin_management import CreateAdmin, DeactivateAdmin, GetAdmin
     super_admin     = _seed_admin(role="super_admin")
     new_admin       = CreateAdmin(super_admin).execute(
         username="officer1", plain_text_password="securepass",
@@ -414,13 +414,13 @@ def test_deactivate_admin_sets_is_active_to_false():
 
 
 def test_deactivate_own_account_raises_error():
-    from Backend.admins import DeactivateAdmin
+    from Backend.admin_management import DeactivateAdmin
     super_admin = _seed_admin(role="super_admin")
     expect_raises(ValueError, lambda: DeactivateAdmin(super_admin).execute(super_admin["id"]))
 
 
 def test_deactivate_admin_as_non_super_admin_raises_permission_error():
-    from Backend.admins import CreateAdmin, DeactivateAdmin
+    from Backend.admin_management import CreateAdmin, DeactivateAdmin
     super_admin      = _seed_admin(role="super_admin")
     election_officer = CreateAdmin(super_admin).execute(
         username="officer1", plain_text_password="securepass",
