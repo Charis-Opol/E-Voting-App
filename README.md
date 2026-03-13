@@ -50,7 +50,7 @@ E-Voting-App/
 
 ## 4. Design Decisions
 
-### Modular Design (25%)
+### Modular Design 
 
 The monolith was split by **responsibility**. Each file handles one clearly defined area:
 
@@ -65,7 +65,7 @@ The monolith was split by **responsibility**. Each file handles one clearly defi
 
 No module exceeds a single, well-defined concern.
 
-### Object-Oriented Design (20%)
+### Object-Oriented Design 
 
 The **`DatabaseEngine`** class in `api_engine.py` encapsulates all data access. It treats `database.json` top-level keys as logical "tables" and exposes CRUD methods:
 
@@ -76,7 +76,7 @@ The **`DatabaseEngine`** class in `api_engine.py` encapsulates all data access. 
 
 Internal data (`self._data`) is private. No other module reads or writes JSON files directly.
 
-### Separation of Concerns (20%)
+### Separation of Concerns 
 
 The architecture enforces a **three-layer separation**:
 
@@ -98,7 +98,7 @@ The architecture enforces a **three-layer separation**:
 - **Logic layer** — Each dashboard module calls UI functions for display and `DatabaseEngine` methods for data. It never touches the filesystem.
 - **Data layer** — `DatabaseEngine` is the sole gateway to `database.json`. Every `insert()`, `update()`, and `delete()` immediately persists to disk.
 
-### Clean Code Quality (15%)
+### Clean Code Quality 
 
 - **Naming:** Functions like `create_candidate()`, `view_poll_results()`, and `cast_vote()` clearly state their intent.
 - **No duplication:** Shared UI helpers (`header()`, `prompt()`, `status_badge()`, etc.) are defined once in `ui.py` and imported everywhere.
@@ -106,7 +106,7 @@ The architecture enforces a **three-layer separation**:
 - **Consistent style:** All modules follow the same pattern: import UI helpers → import colours → define functions that take `(db, current_user)`.
 - **No global state:** The original used 15+ global variables (`candidates`, `voters`, `current_user`, etc.). The refactored version passes `db` and `current_user` as explicit parameters.
 
-### Working Application (10%)
+### Working Application 
 
 The refactored application behaves **identically** to the original:
 
@@ -136,4 +136,3 @@ This enforces that **no business logic function ever calls `open()` or `json.dum
 
 ---
 
-*Refactored by the project team as part of the Easter 2026 Software Construction examination.*
