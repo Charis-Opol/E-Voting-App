@@ -8,7 +8,21 @@
 
 The original application (`e_voting_console_app.py`, ~1 633 lines) was a single-file monolith. All UI rendering, business logic, data storage, authentication, and CRUD operations were packed into one file using global variables and procedural functions. This violated modular design, separation of concerns, and made the codebase difficult to maintain, test, or extend.
 
-## 2. Refactored Project Structure
+## 2. Initial Audit & Task Allocation
+
+Before restructuring the application, the team conducted a comprehensive review of the monolith—documented in `Audit.md`. We mapped out the required components and distributed responsibilities to allow parallel development with minimal merge conflicts. 
+
+Prioritization was structured specifically around **collaboration and extensibility**:
+1. **Foundation First:** Carol built the shared UI utilities (`ui.py`, `colors.py`), global settings/auth (`auth_service.py`), and the decoupled data layer (`api_engine.py`). This provided a stable API for everyone else to build upon.
+2. **Independent Domains:** The business logic was logically partitioned, allowing developers to work on separate modules that relied solely on the shared `DatabaseEngine`:
+   - **Carol:** Admin Dashboard and Authentication logic.
+   - **Ezra:** Candidate, Station, and Position Management CRUD.
+   - **Charis:** Poll Management, Voter Management, and Admin Management.
+   - **Nathaniel:** The Voting Process (Voter Dashboard), Stats & Results generation, and main app integration.
+
+Because UI rendering and data persistence were fully abstracted early on, team members could work simultaneously without interfering with each other's code.
+
+## 3. Refactored Project Structure
 
 ```
 E-Voting-App/
@@ -34,7 +48,7 @@ E-Voting-App/
     └── admin_management.py       ← Admin account management
 ```
 
-## 3. Design Decisions
+## 4. Design Decisions
 
 ### Modular Design (25%)
 
@@ -105,7 +119,7 @@ The refactored application behaves **identically** to the original:
 
 **To run:** `cd Frontend && python3 main.py`
 
-## 4. How the Database Engine Works
+## 5. How the Database Engine Works
 
 Instead of loading the entire JSON into scattered global dictionaries, all data flows through one `DatabaseEngine` instance:
 
