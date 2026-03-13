@@ -1,7 +1,7 @@
 from ui import UI
 from admin_dashboard import AdminDashboard
 from auth_service import AuthService
-from data_storage import DataStorage
+from Backend.data_storage import DataStorage
 
 
 class EVotingSystem:
