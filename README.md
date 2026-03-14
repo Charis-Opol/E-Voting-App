@@ -134,5 +134,11 @@ db.log_action("VERIFY_VOTER", admin, details)    # Audit logging
 
 This enforces that **no business logic function ever calls `open()` or `json.dump()`** — all persistence is handled by the engine.
 
+## MEMBERS 
+1. Nathaniel Mugenyi M24B23/027
+2. Kasule Ezra Evans S24B23/036
+3. Naddunga Carol S24B23/038
+4. Opol Charis S24B23/003 
+
 ---
 
