@@ -1,11 +1,10 @@
 class CandidateUI:
 
-    def __init__(self, candidate_service, console, user):
+    def __init__(self, candidate_service, console):
         self._candidate_service = candidate_service
         self._console = console
-        self._user = user
 
-    def create_candidate(self):
+    def create_candidate(self, admin_user):
 
         self._console.print("Create Candidate")
 
@@ -19,12 +18,25 @@ class CandidateUI:
         address = self._console.input("Address: ")
         phone = self._console.input("Phone: ")
         email = self._console.input("Email: ")
-        years_experience = int(self._console.input("Years Experience: "))
+        try:
+            years_experience = int(self._console.input("Years Experience: "))
+        except ValueError:
+            self._console.print_error("Invalid input for Years Experience. Must be an integer.")
+            return
+
+        # Validate and get age
+        age, error = self._candidate_service.validate_candidate(
+            full_name, national_id, dob, "no" # assuming no criminal record for now or could ask
+        )
+        if error:
+            self._console.print_error(error)
+            return
 
         cid = self._candidate_service.create_candidate(
             full_name,
             national_id,
             dob,
+            age,
             gender,
             education,
             party,
@@ -33,7 +45,7 @@ class CandidateUI:
             phone,
             email,
             years_experience,
-            self._user["username"],
+            admin_user["username"],
         )
 
         self._console.print(f"Candidate created with ID: {cid}")

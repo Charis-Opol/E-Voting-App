@@ -54,3 +54,114 @@ class VoterDashboard:
             else:
                 self.console.print_error("Invalid choice.")
                 self.console.pause()
+
+    def _view_open_polls(self):
+        polls = self._vote.get_available_polls_for_voter(self._user)
+        if not polls:
+            self.console.print_info("No open polls available for you at this time.")
+        else:
+            for pid, p in polls.items():
+                self.console.print(f"{pid} | {p['title']} | Ends: {p['end_date']}")
+        self.console.pause()
+
+    def _cast_vote(self):
+        polls = self._vote.get_available_polls_for_voter(self._user)
+        if not polls:
+            self.console.print_info("No polls available to vote in.")
+            self.console.pause()
+            return
+        
+        for pid, p in polls.items():
+            self.console.print(f"{pid}: {p['title']}")
+        
+        choice_input = self.console.prompt("Enter Poll ID to vote in: ")
+        if not choice_input.isdigit(): return
+        pid = int(choice_input)
+        
+        if pid not in polls:
+            self.console.print_error("Invalid Poll ID.")
+            self.console.pause()
+            return
+
+        poll = polls[pid]
+        selections = []
+        for pos in poll.get("positions", []):
+            self.console.print(f"\nPosition: {pos['title']}")
+            candidates = {cid: self._store.candidates[cid] for cid in pos['candidate_ids']}
+            for cid, c in candidates.items():
+                self.console.print(f"  {cid}: {c['full_name']} ({c['party']})")
+            self.console.print("  0: Abstain")
+            
+            choice = self.console.prompt("Select candidate ID (or 0): ")
+            if choice == "0":
+                selections.append({
+                    "position_id": pos['position_id'],
+                    "position_title": pos['title'],
+                    "candidate_id": None,
+                    "abstained": True
+                })
+            elif choice.isdigit() and int(choice) in candidates:
+                cid = int(choice)
+                selections.append({
+                    "position_id": pos['position_id'],
+                    "position_title": pos['title'],
+                    "candidate_id": cid,
+                    "abstained": False
+                })
+            else:
+                self.console.print_error("Invalid choice, skipping this position.")
+
+        if selections:
+            confirm = self.console.prompt("Confirm cast vote? (y/n): ")
+            if confirm.lower() == 'y':
+                ref = self._vote.cast_votes(self._user, pid, selections)
+                self.console.print_success(f"Vote cast! Reference: {ref}")
+        self.console.pause()
+
+    def _view_voting_history(self):
+        history = self._user.get("has_voted_in", [])
+        if not history:
+            self.console.print_info("You have not voted in any polls yet.")
+        else:
+            self.console.print("Your Voting History:")
+            for pid in history:
+                poll = self._store.polls.get(pid, {"title": "Unknown Poll"})
+                self.console.print(f"- {poll['title']}")
+        self.console.pause()
+
+    def _view_closed_poll_results(self):
+        polls = self._vote.get_closed_polls()
+        if not polls:
+            self.console.print_info("No closed polls found.")
+        else:
+            for pid, p in polls.items():
+                self.console.print(f"{pid} | {p['title']}")
+            
+            choice_input = self.console.prompt("Enter Poll ID to view results: ")
+            if not choice_input.isdigit(): return
+            pid = int(choice_input)
+            
+            if pid in polls:
+                self.console.print(f"Results for {polls[pid]['title']}:")
+                # (Simple listing for now as per system capability)
+            else:
+                self.console.print_error("Invalid ID.")
+        self.console.pause()
+
+    def _view_profile(self):
+        self.console.header("MY PROFILE", THEME_VOTER)
+        for k, v in self._user.items():
+            if k not in ["password", "role", "id"]:
+                self.console.print(f"  {k.replace('_', ' ').title()}: {v}")
+        self.console.pause()
+
+    def _change_password(self):
+        old = self.console.prompt("Current Password: ", password=True)
+        new = self.console.prompt("New Password: ", password=True)
+        conf = self.console.prompt("Confirm New Password: ", password=True)
+        success, msg = self._auth.change_voter_password(self._user, old, new, conf)
+        if success:
+            self.console.print_success(msg or "Password changed successfully.")
+        else:
+            self.console.print_error(msg or "Failed to change password.")
+        self.console.pause()

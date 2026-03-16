@@ -8,7 +8,8 @@ class AdminDashboard:
         poll_ui,
         voter_ui,
         admin_ui,
-        report_ui
+        report_ui,
+        current_user
     ):
 
         self.console = console
@@ -18,6 +19,7 @@ class AdminDashboard:
         self.voter_ui = voter_ui
         self.admin_ui = admin_ui
         self.report_ui = report_ui
+        self.current_user = current_user
 
 
     def show(self):
@@ -41,25 +43,25 @@ class AdminDashboard:
             choice = self.console.input("Select option: ")
 
             if choice == "1":
-                self.candidate_ui.create_candidate()
+                self.candidate_ui.create_candidate(self.current_user)
 
             elif choice == "2":
                 self.candidate_ui.view_candidates()
 
             elif choice == "3":
-                self.station_ui.create_station()
+                self.station_ui.create_station(self.current_user)
 
             elif choice == "4":
                 self.station_ui.view_stations()
 
             elif choice == "5":
-                self.poll_ui.create_poll()
+                self.poll_ui.create_poll(self.current_user)
 
             elif choice == "6":
                 self.poll_ui.view_polls()
 
             elif choice == "7":
-                self.voter_ui.register_voter()
+                self.voter_ui.register_voter(self.current_user)
 
             elif choice == "8":
                 self.report_ui.view_results()

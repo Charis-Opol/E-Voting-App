@@ -174,3 +174,18 @@ class PollService:
             "registered":    registered,
             "turnout":       turnout,
         }
+    def get_poll_results(self, pid: int) -> dict:
+        """Aggregates votes by candidate name for the given poll ID."""
+        counts = {}
+        target_poll = self._store.polls.get(pid)
+        if not target_poll:
+            return {}
+
+        for v in self._store.votes:
+            if v["poll_id"] == pid and not v["abstained"]:
+                cid = v["candidate_id"]
+                candidate = self._store.candidates.get(cid, {})
+                name = candidate.get("full_name", f"Unknown Candidate (ID: {cid})")
+                counts[name] = counts.get(name, 0) + 1
+        
+        return counts

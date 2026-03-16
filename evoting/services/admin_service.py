@@ -53,6 +53,10 @@ class AdminService:
     def get_all_admins(self) -> dict:
         return self._store.admins
 
+    def get_audit_log(self):
+        return self._store.audit_log
+
+
     def deactivate_admin(self, aid: int, requesting_admin_id: int, deactivated_by: str) -> tuple:
         """Returns (True, username) or (False, error_message)."""
         if aid not in self._store.admins:

@@ -71,7 +71,7 @@ def build_ui(console, services):
     candidate_ui = CandidateUI(candidate_svc, console)
     station_ui   = StationUI(station_svc, console)
     poll_ui      = PollUI(poll_svc, console)
-    voter_ui     = VoterUI(voter_svc, console)
+    voter_ui     = VoterUI(voter_svc, auth_svc, console)
     admin_ui     = AdminUI(admin_svc, console)
     report_ui    = ReportUI(poll_svc, console)
 
@@ -82,7 +82,8 @@ def build_ui(console, services):
         "voter_ui": voter_ui,
         "admin_ui": admin_ui,
         "report_ui": report_ui,
-        "auth_svc": auth_svc
+        "auth_svc": auth_svc,
+        "vote_svc": vote_svc
     }
 
 
@@ -117,21 +118,21 @@ def main():
                 console      = console,
                 candidate_ui = ui["candidate_ui"],
                 station_ui   = ui["station_ui"],
-                position_ui  = ui["position_ui"],
                 poll_ui      = ui["poll_ui"],
                 voter_ui     = ui["voter_ui"],
                 admin_ui     = ui["admin_ui"],
-                report_ui    = ui["report_ui"]
+                report_ui    = ui["report_ui"],
+                current_user = current_user
             ).show()
 
         elif role == "voter":
             VoterDashboard(
                 console      = console,
-                vote_ui      = ui["vote_ui"],
-                auth_ui      = ui["auth_svc"],
+                vote_svc     = ui["vote_svc"],
+                auth_svc     = ui["auth_svc"],
                 store        = store,
                 current_user = current_user
-            ).show()
+            ).run()
 
 
 if __name__ == "__main__":

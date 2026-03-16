@@ -7,7 +7,7 @@ class AdminUI:
 
     def view_admins(self):
 
-        admins = self._admin_service.get_all_admins()
+        admins = self._admin_service.get_all_admins().values()
 
         for a in admins:
             self._console.print(a["username"])
