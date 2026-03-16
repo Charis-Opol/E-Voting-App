@@ -12,6 +12,7 @@ import shutil
 import datetime
 
 # ── Test setup ────────────────────────────────────────────────────────────────
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 TEST_DATA_DIRECTORY = "test_data"
 
@@ -484,7 +485,7 @@ def test_get_recent_audit_entries_returns_newest_first():
 
 
 def test_audit_log_is_append_only_and_never_modified():
-    from Backend.audits import LogAuditEntry, GetAllAuditEntries, AuditStore, AuditAction
+    from Backend.audits import LogAuditEntry, GetAllAuditEntries, AuditStore, AuditAction, GetAuditEntriesByAdmin, GetAuditEntriesByAction, GetRecentAuditEntries
     LogAuditEntry().execute(AuditAction.POLL_CREATED, "admin", "Created poll A")
     first_entry_id = GetAllAuditEntries().execute()[0]["id"]
 
@@ -493,9 +494,9 @@ def test_audit_log_is_append_only_and_never_modified():
     all_operation_class_names = [
         cls.__name__ for cls in [
             LogAuditEntry, GetAllAuditEntries,
-            __import__("audits").GetAuditEntriesByAdmin,
-            __import__("audits").GetAuditEntriesByAction,
-            __import__("audits").GetRecentAuditEntries,
+            GetAuditEntriesByAdmin,
+            GetAuditEntriesByAction,
+            GetRecentAuditEntries,
         ]
     ]
     assert "EditAuditEntry"   not in all_operation_class_names

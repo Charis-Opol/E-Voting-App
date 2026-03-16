@@ -11,10 +11,14 @@ from security import hash_password
 
 
 def voter_dashboard(db, current_user):
+    from Backend.station_management import GetAllStations
+    from Backend.audits import LogAuditEntry
+    
     while True:
         clear_screen()
         header("VOTER DASHBOARD", THEME_VOTER)
-        stations = db.get_all("voting_stations")
+        
+        stations = {s["id"]: s for s in GetAllStations().execute()}
         station_name = stations.get(current_user["station_id"], {}).get("name", "Unknown")
         print(f"  {THEME_VOTER}  ● {RESET}{BOLD}{current_user['full_name']}{RESET}")
         print(f"  {DIM}    Card: {current_user['voter_card_number']}  │  Station: {station_name}{RESET}")
@@ -35,16 +39,20 @@ def voter_dashboard(db, current_user):
         elif choice == "5": view_voter_profile(db, current_user)
         elif choice == "6": change_voter_password(db, current_user)
         elif choice == "7":
-            db.log_action("LOGOUT", current_user["voter_card_number"], "Voter logged out")
-            db.save(); break
+            LogAuditEntry().execute("LOGOUT", current_user["voter_card_number"], "Voter logged out")
+            break
         else: error("Invalid choice."); pause()
 
 
 def view_open_polls_voter(db, current_user):
     clear_screen()
     header("OPEN POLLS", THEME_VOTER)
-    polls = db.get_all("polls")
-    candidates = db.get_all("candidates")
+    
+    from Backend.polls_management import GetAllPolls
+    from Backend.storage import JsonStore
+    polls = {p["id"]: p for p in GetAllPolls().execute()}
+    candidates = {c["id"]: c for c in JsonStore("data/candidates.json").all()}
+    
     open_polls = {pid: p for pid, p in polls.items() if p["status"] == "open"}
     if not open_polls: print(); info("No open polls at this time."); pause(); return
     for pid, poll in open_polls.items():
@@ -64,8 +72,15 @@ def view_open_polls_voter(db, current_user):
 def cast_vote(db, current_user):
     clear_screen()
     header("CAST YOUR VOTE", THEME_VOTER)
-    polls = db.get_all("polls")
-    candidates = db.get_all("candidates")
+    
+    from Backend.polls_management import GetAllPolls, UpdatePoll
+    from Backend.storage import JsonStore
+    from Backend.audits import LogAuditEntry
+    from Backend.voters_management import UpdateVoter
+    
+    polls = {p["id"]: p for p in GetAllPolls().execute()}
+    candidates = {c["id"]: c for c in JsonStore("data/candidates.json").all()}
+    
     open_polls = {pid: p for pid, p in polls.items() if p["status"] == "open"}
     if not open_polls: print(); info("No open polls at this time."); pause(); return
     available = {}
@@ -112,19 +127,22 @@ def cast_vote(db, current_user):
     if prompt("Confirm your votes? This cannot be undone. (yes/no): ").lower() != "yes": info("Vote cancelled."); pause(); return
     vote_timestamp = str(datetime.datetime.now())
     vote_hash = hashlib.sha256(f"{current_user['id']}{pid}{vote_timestamp}".encode()).hexdigest()[:16]
+    
+    votes_store = JsonStore("data/votes.json")
     for mv in my_votes:
-        db.append_to_list("votes", {"vote_id": vote_hash + str(mv["position_id"]), "poll_id": pid, "position_id": mv["position_id"], "candidate_id": mv["candidate_id"], "voter_id": current_user["id"], "station_id": current_user["station_id"], "timestamp": vote_timestamp, "abstained": mv["abstained"]})
+        votes_store.insert({"vote_id": vote_hash + str(mv["position_id"]), "poll_id": pid, "position_id": mv["position_id"], "candidate_id": mv["candidate_id"], "voter_id": current_user["id"], "station_id": current_user["station_id"], "timestamp": vote_timestamp, "abstained": mv["abstained"]})
+        
     current_user["has_voted_in"].append(pid)
-    voters = db.get_all("voters")
-    for vid, v in voters.items():
-        if v["id"] == current_user["id"]:
-            db.update("voters", vid, {"has_voted_in": v.get("has_voted_in", []) + [pid]}); break
-    db.update("polls", pid, {"total_votes_cast": poll["total_votes_cast"] + 1})
-    db.log_action("CAST_VOTE", current_user["voter_card_number"], f"Voted in poll: {poll['title']} (Hash: {vote_hash})")
-    print()
-    success("Your vote has been recorded successfully!")
-    print(f"  {DIM}Vote Reference:{RESET} {BRIGHT_YELLOW}{vote_hash}{RESET}")
-    print(f"  {BRIGHT_CYAN}Thank you for participating in the democratic process!{RESET}")
+    try:
+        UpdateVoter().execute(current_user["id"], {"has_voted_in": current_user.get("has_voted_in", [])})
+        UpdatePoll().execute(pid, {"total_votes_cast": poll["total_votes_cast"] + 1})
+        LogAuditEntry().execute("CAST_VOTE", current_user["voter_card_number"], f"Voted in poll: {poll['title']} (Hash: {vote_hash})")
+        print()
+        success("Your vote has been recorded successfully!")
+        print(f"  {DIM}Vote Reference:{RESET} {BRIGHT_YELLOW}{vote_hash}{RESET}")
+        print(f"  {BRIGHT_CYAN}Thank you for participating in the democratic process!{RESET}")
+    except Exception as e:
+        error(str(e))
     pause()
 
 
@@ -133,9 +151,13 @@ def view_voting_history(db, current_user):
     header("MY VOTING HISTORY", THEME_VOTER)
     voted_polls = current_user.get("has_voted_in", [])
     if not voted_polls: print(); info("You have not voted in any polls yet."); pause(); return
-    polls = db.get_all("polls")
-    votes = db.get_list("votes")
-    candidates = db.get_all("candidates")
+    
+    from Backend.polls_management import GetAllPolls
+    from Backend.storage import JsonStore
+    polls = {p["id"]: p for p in GetAllPolls().execute()}
+    candidates = {c["id"]: c for c in JsonStore("data/candidates.json").all()}
+    votes = JsonStore("data/votes.json").all()
+    
     print(f"\n  {DIM}You have voted in {len(voted_polls)} poll(s):{RESET}\n")
     for pid in voted_polls:
         if pid in polls:
@@ -154,9 +176,15 @@ def view_voting_history(db, current_user):
 def view_closed_poll_results_voter(db):
     clear_screen()
     header("ELECTION RESULTS", THEME_VOTER)
-    polls = db.get_all("polls")
-    votes = db.get_list("votes")
-    candidates = db.get_all("candidates")
+    
+    from Backend.polls_management import GetAllPolls
+    from Backend.storage import JsonStore
+    polls_list = GetAllPolls().execute()
+    polls = {p["id"]: p for p in polls_list}
+    votes = JsonStore("data/votes.json").all()
+    candidates_list = JsonStore("data/candidates.json").all()
+    candidates = {c["id"]: c for c in candidates_list}
+    
     closed = {pid: p for pid, p in polls.items() if p["status"] == "closed"}
     if not closed: print(); info("No closed polls with results."); pause(); return
     for pid, poll in closed.items():
@@ -186,7 +214,11 @@ def view_voter_profile(db, current_user):
     clear_screen()
     header("MY PROFILE", THEME_VOTER)
     v = current_user
-    stations = db.get_all("voting_stations")
+    
+    from Backend.station_management import GetAllStations
+    stations_list = GetAllStations().execute()
+    stations = {s["id"]: s for s in stations_list}
+    
     station_name = stations.get(v["station_id"], {}).get("name", "Unknown")
     print()
     for label, value in [
@@ -213,10 +245,14 @@ def change_voter_password(db, current_user):
     confirm_pass = masked_input("Confirm New Password: ").strip()
     if new_pass != confirm_pass: error("Passwords do not match."); pause(); return
     current_user["password"] = hash_password(new_pass)
-    voters = db.get_all("voters")
-    for vid, v in voters.items():
-        if v["id"] == current_user["id"]:
-            db.update("voters", vid, {"password": hash_password(new_pass)}); break
-    db.log_action("CHANGE_PASSWORD", current_user["voter_card_number"], "Password changed")
-    print(); success("Password changed successfully!")
+    
+    from Backend.voters_management import UpdateVoter
+    from Backend.audits import LogAuditEntry
+    
+    try:
+        UpdateVoter().execute(current_user["id"], {"password": current_user["password"]})
+        LogAuditEntry().execute("CHANGE_PASSWORD", current_user["voter_card_number"], "Password changed")
+        print(); success("Password changed successfully!")
+    except Exception as e:
+        error(str(e))
     pause()

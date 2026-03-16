@@ -114,13 +114,18 @@ def admin_dashboard(db, current_user):
 def create_candidate(db, current_user):
     clear_screen()
     header("CREATE NEW CANDIDATE", THEME_ADMIN)
+    
+    from Backend.storage import JsonStore
+    from Backend.audits import LogAuditEntry
+    candidate_store = JsonStore("data/candidates.json")
+    candidates = candidate_store.all()
+    
     print()
     full_name = prompt("Full Name: ")
     if not full_name: error("Name cannot be empty."); pause(); return
     national_id = prompt("National ID: ")
     if not national_id: error("National ID cannot be empty."); pause(); return
-    candidates = db.get_all("candidates")
-    for cid, c in candidates.items():
+    for c in candidates:
         if c["national_id"] == national_id: error("A candidate with this National ID already exists."); pause(); return
     dob_str = prompt("Date of Birth (YYYY-MM-DD): ")
     try:
@@ -146,34 +151,41 @@ def create_candidate(db, current_user):
     criminal_record = prompt("Has Criminal Record? (yes/no): ").lower()
     if criminal_record == "yes":
         error("Candidates with criminal records are not eligible.")
-        db.log_action("CANDIDATE_REJECTED", current_user["username"], f"Candidate {full_name} rejected - criminal record")
+        LogAuditEntry().execute("CANDIDATE_REJECTED", current_user["username"], f"Candidate {full_name} rejected - criminal record")
         pause(); return
     years_experience = prompt("Years of Public Service/Political Experience: ")
     try: years_experience = int(years_experience)
     except ValueError: years_experience = 0
-    cid = db.get_next_id("candidates")
-    db.insert("candidates", cid, {
-        "id": cid, "full_name": full_name, "national_id": national_id,
+    
+    new_candidate = {
+        "full_name": full_name, "national_id": national_id,
         "date_of_birth": dob_str, "age": age, "gender": gender, "education": education,
         "party": party, "manifesto": manifesto, "address": address, "phone": phone,
         "email": email, "has_criminal_record": False, "years_experience": years_experience,
         "is_active": True, "is_approved": True,
         "created_at": str(datetime.datetime.now()), "created_by": current_user["username"]
-    })
-    db.log_action("CREATE_CANDIDATE", current_user["username"], f"Created candidate: {full_name} (ID: {cid})")
+    }
+    inserted = candidate_store.insert(new_candidate)
+    cid = inserted["id"]
+    
+    LogAuditEntry().execute("CREATE_CANDIDATE", current_user["username"], f"Created candidate: {full_name} (ID: {cid})")
     print(); success(f"Candidate '{full_name}' created successfully! ID: {cid}")
-    db.increment_counter("candidates"); pause()
+    pause()
 
 
 def view_all_candidates(db):
     clear_screen()
     header("ALL CANDIDATES", THEME_ADMIN)
-    candidates = db.get_all("candidates")
+    
+    from Backend.storage import JsonStore
+    candidate_store = JsonStore("data/candidates.json")
+    candidates = candidate_store.all()
+    
     if not candidates: print(); info("No candidates found."); pause(); return
     print()
     table_header(f"{'ID':<5} {'Name':<25} {'Party':<20} {'Age':<5} {'Education':<20} {'Status':<10}", THEME_ADMIN)
     table_divider(85, THEME_ADMIN)
-    for cid, c in candidates.items():
+    for c in candidates:
         s = status_badge("Active", True) if c["is_active"] else status_badge("Inactive", False)
         print(f"  {c['id']:<5} {c['full_name']:<25} {c['party']:<20} {c['age']:<5} {c['education']:<20} {s}")
     print(f"\n  {DIM}Total Candidates: {len(candidates)}{RESET}")
@@ -183,7 +195,13 @@ def view_all_candidates(db):
 def update_candidate(db, current_user):
     clear_screen()
     header("UPDATE CANDIDATE", THEME_ADMIN)
-    candidates = db.get_all("candidates")
+    
+    from Backend.storage import JsonStore
+    from Backend.audits import LogAuditEntry
+    candidate_store = JsonStore("data/candidates.json")
+    candidates_list = candidate_store.all()
+    candidates = {c["id"]: c for c in candidates_list}
+    
     if not candidates: print(); info("No candidates found."); pause(); return
     print()
     for cid, c in candidates.items():
@@ -211,9 +229,9 @@ def update_candidate(db, current_user):
     if new_exp:
         try: changes["years_experience"] = int(new_exp)
         except ValueError: warning("Invalid number, keeping old value.")
-    if changes: db.update("candidates", cid, changes)
+    if changes: candidate_store.update(cid, changes)
     name = changes.get("full_name", c["full_name"])
-    db.log_action("UPDATE_CANDIDATE", current_user["username"], f"Updated candidate: {name} (ID: {cid})")
+    LogAuditEntry().execute("UPDATE_CANDIDATE", current_user["username"], f"Updated candidate: {name} (ID: {cid})")
     print(); success(f"Candidate '{name}' updated successfully!")
     pause()
 
@@ -221,8 +239,18 @@ def update_candidate(db, current_user):
 def delete_candidate(db, current_user):
     clear_screen()
     header("DELETE CANDIDATE", THEME_ADMIN)
-    candidates = db.get_all("candidates")
-    polls = db.get_all("polls")
+    
+    from Backend.storage import JsonStore
+    from Backend.polls_management import GetAllPolls
+    from Backend.audits import LogAuditEntry
+    
+    candidate_store = JsonStore("data/candidates.json")
+    candidates_list = candidate_store.all()
+    candidates = {c["id"]: c for c in candidates_list}
+    
+    polls_list = GetAllPolls().execute()
+    polls = {p["id"]: p for p in polls_list}
+    
     if not candidates: print(); info("No candidates found."); pause(); return
     print()
     for cid, c in candidates.items():
@@ -239,8 +267,8 @@ def delete_candidate(db, current_user):
     confirm = prompt(f"Are you sure you want to delete '{candidates[cid]['full_name']}'? (yes/no): ").lower()
     if confirm == "yes":
         deleted_name = candidates[cid]["full_name"]
-        db.update("candidates", cid, {"is_active": False})
-        db.log_action("DELETE_CANDIDATE", current_user["username"], f"Deactivated candidate: {deleted_name} (ID: {cid})")
+        candidate_store.update(cid, {"is_active": False})
+        LogAuditEntry().execute("DELETE_CANDIDATE", current_user["username"], f"Deactivated candidate: {deleted_name} (ID: {cid})")
         print(); success(f"Candidate '{deleted_name}' has been deactivated.")
     else: info("Deletion cancelled.")
     pause()
@@ -255,7 +283,12 @@ def search_candidates(db):
     menu_item(3, "Education Level", THEME_ADMIN)
     menu_item(4, "Age Range", THEME_ADMIN)
     choice = prompt("\nChoice: ")
-    candidates = db.get_all("candidates")
+    
+    from Backend.storage import JsonStore
+    candidate_store = JsonStore("data/candidates.json")
+    candidates_list = candidate_store.all()
+    candidates = {c["id"]: c for c in candidates_list}
+    
     results = []
     if choice == "1":
         term = prompt("Enter name to search: ").lower()
@@ -308,29 +341,44 @@ def create_voting_station(db, current_user):
     contact = prompt("Contact Phone: ")
     opening_time = prompt("Opening Time (e.g. 08:00): ")
     closing_time = prompt("Closing Time (e.g. 17:00): ")
-    sid = db.get_next_id("voting_stations")
-    db.insert("voting_stations", sid, {
-        "id": sid, "name": name, "location": location, "region": region,
-        "capacity": capacity, "registered_voters": 0, "supervisor": supervisor,
-        "contact": contact, "opening_time": opening_time, "closing_time": closing_time,
-        "is_active": True, "created_at": str(datetime.datetime.now()), "created_by": current_user["username"]
-    })
-    db.log_action("CREATE_STATION", current_user["username"], f"Created station: {name} (ID: {sid})")
-    print(); success(f"Voting Station '{name}' created! ID: {sid}")
-    db.increment_counter("voting_stations"); pause()
+    
+    from Backend.station_management import CreateStation
+    from Backend.audits import LogAuditEntry
+    
+    try:
+        new_station = CreateStation(current_user["username"]).execute(
+            name=name, location=location, region=region, capacity=capacity,
+            supervisor=supervisor, contact_phone=contact,
+            opening_time=opening_time, closing_time=closing_time
+        )
+        sid = new_station["id"]
+        LogAuditEntry().execute("CREATE_STATION", current_user["username"], f"Created station: {name} (ID: {sid})")
+        print(); success(f"Voting Station '{name}' created! ID: {sid}")
+    except ValueError as e:
+        error(str(e))
+    except Exception as e:
+        error(str(e))
+    pause()
 
 
 def view_all_stations(db):
     clear_screen()
     header("ALL VOTING STATIONS", THEME_ADMIN)
-    stations = db.get_all("voting_stations")
-    voters = db.get_all("voters")
+    
+    from Backend.station_management import GetAllStations, CountRegisteredVoters
+    from Backend.voters_management import GetAllVoters
+    
+    stations = GetAllStations().execute()
+    voters = GetAllVoters().execute()
+    
     if not stations: print(); info("No voting stations found."); pause(); return
     print()
     table_header(f"{'ID':<5} {'Name':<25} {'Location':<25} {'Region':<15} {'Cap.':<8} {'Reg.':<8} {'Status':<10}", THEME_ADMIN)
     table_divider(96, THEME_ADMIN)
-    for sid, s in stations.items():
-        reg_count = sum(1 for v in voters.values() if v["station_id"] == sid)
+    
+    counter = CountRegisteredVoters(voters)
+    for s in stations:
+        reg_count = counter.execute(s["id"])
         st = status_badge("Active", True) if s["is_active"] else status_badge("Inactive", False)
         print(f"  {s['id']:<5} {s['name']:<25} {s['location']:<25} {s['region']:<15} {s['capacity']:<8} {reg_count:<8} {st}")
     print(f"\n  {DIM}Total Stations: {len(stations)}{RESET}")
@@ -340,7 +388,12 @@ def view_all_stations(db):
 def update_station(db, current_user):
     clear_screen()
     header("UPDATE VOTING STATION", THEME_ADMIN)
-    stations = db.get_all("voting_stations")
+    
+    from Backend.station_management import GetAllStations, UpdateStation
+    from Backend.audits import LogAuditEntry
+    stations_list = GetAllStations().execute()
+    stations = {s["id"]: s for s in stations_list}
+    
     if not stations: print(); info("No stations found."); pause(); return
     print()
     for sid, s in stations.items():
@@ -364,19 +417,30 @@ def update_station(db, current_user):
         except ValueError: warning("Invalid number, keeping old value.")
     ns = prompt(f"Supervisor [{s['supervisor']}]: ");
     if ns: changes["supervisor"] = ns
-    nco = prompt(f"Contact [{s['contact']}]: ");
-    if nco: changes["contact"] = nco
-    if changes: db.update("voting_stations", sid, changes)
-    db.log_action("UPDATE_STATION", current_user["username"], f"Updated station: {changes.get('name', s['name'])} (ID: {sid})")
-    print(); success(f"Station '{changes.get('name', s['name'])}' updated successfully!")
+    nco = prompt(f"Contact [{s.get('contact_phone', '')}]: ");
+    if nco: changes["contact_phone"] = nco
+    
+    if changes:
+        try:
+            UpdateStation().execute(sid, changes)
+            LogAuditEntry().execute("UPDATE_STATION", current_user["username"], f"Updated station: {changes.get('name', s['name'])} (ID: {sid})")
+            print(); success(f"Station '{changes.get('name', s['name'])}' updated successfully!")
+        except Exception as e:
+            error(str(e))
     pause()
 
 
 def delete_station(db, current_user):
     clear_screen()
     header("DELETE VOTING STATION", THEME_ADMIN)
-    stations = db.get_all("voting_stations")
-    voters = db.get_all("voters")
+    
+    from Backend.station_management import GetAllStations, DeactivateStation
+    from Backend.voters_management import GetAllVoters
+    from Backend.audits import LogAuditEntry
+    stations_list = GetAllStations().execute()
+    stations = {s["id"]: s for s in stations_list}
+    voters = GetAllVoters().execute()
+    
     if not stations: print(); info("No stations found."); pause(); return
     print()
     for sid, s in stations.items():
@@ -385,14 +449,14 @@ def delete_station(db, current_user):
     try: sid = int(prompt("\nEnter Station ID to delete: "))
     except ValueError: error("Invalid input."); pause(); return
     if sid not in stations: error("Station not found."); pause(); return
-    voter_count = sum(1 for v in voters.values() if v["station_id"] == sid)
-    if voter_count > 0:
-        warning(f"{voter_count} voters are registered at this station.")
-        if prompt("Proceed with deactivation? (yes/no): ").lower() != "yes": info("Cancelled."); pause(); return
+    
     if prompt(f"Confirm deactivation of '{stations[sid]['name']}'? (yes/no): ").lower() == "yes":
-        db.update("voting_stations", sid, {"is_active": False})
-        db.log_action("DELETE_STATION", current_user["username"], f"Deactivated station: {stations[sid]['name']}")
-        print(); success(f"Station '{stations[sid]['name']}' deactivated.")
+        try:
+            DeactivateStation(voters).execute(sid, force=True)
+            LogAuditEntry().execute("DELETE_STATION", current_user["username"], f"Deactivated station: {stations[sid]['name']}")
+            print(); success(f"Station '{stations[sid]['name']}' deactivated.")
+        except Exception as e:
+            error(str(e))
     else: info("Cancelled.")
     pause()
 
@@ -414,26 +478,34 @@ def create_position(db, current_user):
     except ValueError: error("Invalid number."); pause(); return
     min_cand_age = prompt(f"Minimum candidate age [{MIN_CANDIDATE_AGE}]: ")
     min_cand_age = int(min_cand_age) if min_cand_age.isdigit() else MIN_CANDIDATE_AGE
-    pid = db.get_next_id("positions")
-    db.insert("positions", pid, {
-        "id": pid, "title": title, "description": description,
-        "level": level.capitalize(), "max_winners": max_winners, "min_candidate_age": min_cand_age,
-        "is_active": True, "created_at": str(datetime.datetime.now()), "created_by": current_user["username"]
-    })
-    db.log_action("CREATE_POSITION", current_user["username"], f"Created position: {title} (ID: {pid})")
-    print(); success(f"Position '{title}' created! ID: {pid}")
-    db.increment_counter("positions"); pause()
+    
+    from Backend.position_management import CreatePosition
+    from Backend.audits import LogAuditEntry
+    
+    try:
+        new_pos = CreatePosition(current_user["username"]).execute(title, description, level, max_winners, min_cand_age)
+        pid = new_pos["id"]
+        LogAuditEntry().execute("CREATE_POSITION", current_user["username"], f"Created position: {title} (ID: {pid})")
+        print(); success(f"Position '{title}' created! ID: {pid}")
+    except ValueError as e:
+        error(str(e))
+    except Exception as e:
+        error(str(e))
+    pause()
 
 
 def view_positions(db):
     clear_screen()
     header("ALL POSITIONS", THEME_ADMIN)
-    positions = db.get_all("positions")
+    
+    from Backend.position_management import GetAllPositions
+    positions = GetAllPositions().execute()
+    
     if not positions: print(); info("No positions found."); pause(); return
     print()
     table_header(f"{'ID':<5} {'Title':<25} {'Level':<12} {'Seats':<8} {'Min Age':<10} {'Status':<10}", THEME_ADMIN)
     table_divider(70, THEME_ADMIN)
-    for pid, p in positions.items():
+    for p in positions:
         s = status_badge("Active", True) if p["is_active"] else status_badge("Inactive", False)
         print(f"  {p['id']:<5} {p['title']:<25} {p['level']:<12} {p['max_winners']:<8} {p['min_candidate_age']:<10} {s}")
     print(f"\n  {DIM}Total Positions: {len(positions)}{RESET}")
@@ -443,7 +515,12 @@ def view_positions(db):
 def update_position(db, current_user):
     clear_screen()
     header("UPDATE POSITION", THEME_ADMIN)
-    positions = db.get_all("positions")
+    
+    from Backend.position_management import GetAllPositions, UpdatePosition
+    from Backend.audits import LogAuditEntry
+    positions_list = GetAllPositions().execute()
+    positions = {p["id"]: p for p in positions_list}
+    
     if not positions: print(); info("No positions found."); pause(); return
     print()
     for pid, p in positions.items():
@@ -465,17 +542,28 @@ def update_position(db, current_user):
     if ns:
         try: changes["max_winners"] = int(ns)
         except ValueError: warning("Keeping old value.")
-    if changes: db.update("positions", pid, changes)
-    db.log_action("UPDATE_POSITION", current_user["username"], f"Updated position: {changes.get('title', p['title'])}")
-    print(); success("Position updated!")
+        
+    if changes:
+        try:
+            UpdatePosition().execute(pid, changes)
+            LogAuditEntry().execute("UPDATE_POSITION", current_user["username"], f"Updated position: {changes.get('title', p['title'])}")
+            print(); success("Position updated!")
+        except Exception as e:
+            error(str(e))
     pause()
 
 
 def delete_position(db, current_user):
     clear_screen()
     header("DELETE POSITION", THEME_ADMIN)
-    positions = db.get_all("positions")
-    polls = db.get_all("polls")
+    
+    from Backend.position_management import GetAllPositions, DeactivatePosition
+    from Backend.polls_management import GetAllPolls
+    from Backend.audits import LogAuditEntry
+    positions_list = GetAllPositions().execute()
+    positions = {p["id"]: p for p in positions_list}
+    polls_list = GetAllPolls().execute()
+    
     if not positions: print(); info("No positions found."); pause(); return
     print()
     for pid, p in positions.items():
@@ -483,14 +571,14 @@ def delete_position(db, current_user):
     try: pid = int(prompt("\nEnter Position ID to delete: "))
     except ValueError: error("Invalid input."); pause(); return
     if pid not in positions: error("Position not found."); pause(); return
-    for poll_id, poll in polls.items():
-        for pp in poll.get("positions", []):
-            if pp["position_id"] == pid and poll["status"] == "open":
-                error(f"Cannot delete - in active poll: {poll['title']}"); pause(); return
+    
     if prompt(f"Confirm deactivation of '{positions[pid]['title']}'? (yes/no): ").lower() == "yes":
-        db.update("positions", pid, {"is_active": False})
-        db.log_action("DELETE_POSITION", current_user["username"], f"Deactivated position: {positions[pid]['title']}")
-        print(); success("Position deactivated.")
+        try:
+            DeactivatePosition(polls_list).execute(pid)
+            LogAuditEntry().execute("DELETE_POSITION", current_user["username"], f"Deactivated position: {positions[pid]['title']}")
+            print(); success("Position deactivated.")
+        except Exception as e:
+            error(str(e))
     pause()
 
 
@@ -511,13 +599,22 @@ def create_poll(db, current_user):
         ed = datetime.datetime.strptime(end_date, "%Y-%m-%d")
         if ed <= sd: error("End date must be after start date."); pause(); return
     except ValueError: error("Invalid date format."); pause(); return
-    positions = db.get_all("positions")
+    
+    from Backend.position_management import GetAllPositions
+    from Backend.station_management import GetAllStations
+    from Backend.polls_management import CreatePoll
+    from Backend.audits import LogAuditEntry
+    
+    positions_list = GetAllPositions().execute()
+    positions = {p["id"]: p for p in positions_list}
     if not positions: error("No positions available. Create positions first."); pause(); return
+    
     subheader("Available Positions", THEME_ADMIN_ACCENT)
     active_pos = {pid: p for pid, p in positions.items() if p["is_active"]}
     if not active_pos: error("No active positions."); pause(); return
     for pid, p in active_pos.items():
         print(f"    {THEME_ADMIN}{p['id']}.{RESET} {p['title']} {DIM}({p['level']}) - {p['max_winners']} seat(s){RESET}")
+        
     try: sel_pos_ids = [int(x.strip()) for x in prompt("\nEnter Position IDs (comma-separated): ").split(",")]
     except ValueError: error("Invalid input."); pause(); return
     poll_positions = []
@@ -525,8 +622,11 @@ def create_poll(db, current_user):
         if spid not in active_pos: warning(f"Position ID {spid} not found or inactive. Skipping."); continue
         poll_positions.append({"position_id": spid, "position_title": positions[spid]["title"], "candidate_ids": [], "max_winners": positions[spid]["max_winners"]})
     if not poll_positions: error("No valid positions selected."); pause(); return
-    stations = db.get_all("voting_stations")
+    
+    stations_list = GetAllStations().execute()
+    stations = {s["id"]: s for s in stations_list}
     if not stations: error("No voting stations. Create stations first."); pause(); return
+    
     subheader("Available Voting Stations", THEME_ADMIN_ACCENT)
     active_st = {sid: s for sid, s in stations.items() if s["is_active"]}
     for sid, s in active_st.items():
@@ -536,25 +636,34 @@ def create_poll(db, current_user):
     else:
         try: sel_st_ids = [int(x.strip()) for x in prompt("Enter Station IDs (comma-separated): ").split(",")]
         except ValueError: error("Invalid input."); pause(); return
-    poll_id = db.get_next_id("polls")
-    db.insert("polls", poll_id, {
-        "id": poll_id, "title": title, "description": description,
-        "election_type": election_type, "start_date": start_date, "end_date": end_date,
-        "positions": poll_positions, "station_ids": sel_st_ids,
-        "status": "draft", "total_votes_cast": 0,
-        "created_at": str(datetime.datetime.now()), "created_by": current_user["username"]
-    })
-    db.log_action("CREATE_POLL", current_user["username"], f"Created poll: {title} (ID: {poll_id})")
-    print(); success(f"Poll '{title}' created! ID: {poll_id}")
-    warning("Status: DRAFT - Assign candidates and then open the poll.")
-    db.increment_counter("polls"); pause()
+        
+    try:
+        new_poll = CreatePoll(current_user["username"]).execute(
+            title=title, description=description, election_type=election_type,
+            start_date=start_date, end_date=end_date, positions=poll_positions, station_ids=sel_st_ids
+        )
+        poll_id = new_poll["id"]
+        LogAuditEntry().execute("POLL_CREATED", current_user["username"], f"Created poll: {title} (ID: {poll_id})")
+        print(); success(f"Poll '{title}' created! ID: {poll_id}")
+        warning("Status: DRAFT - Assign candidates and then open the poll.")
+    except Exception as e:
+        error(str(e))
+    pause()
 
 
 def view_all_polls(db):
     clear_screen()
     header("ALL POLLS / ELECTIONS", THEME_ADMIN)
-    polls = db.get_all("polls")
-    candidates = db.get_all("candidates")
+    
+    from Backend.polls_management import GetAllPolls
+    from Backend.storage import JsonStore
+    polls_list = GetAllPolls().execute()
+    polls = {p["id"]: p for p in polls_list}
+    
+    candidate_store = JsonStore("data/candidates.json")
+    candidates_list = candidate_store.all()
+    candidates = {c["id"]: c for c in candidates_list}
+    
     if not polls: print(); info("No polls found."); pause(); return
     for pid, poll in polls.items():
         sc = GREEN if poll['status'] == 'open' else (YELLOW if poll['status'] == 'draft' else RED)
@@ -572,7 +681,13 @@ def view_all_polls(db):
 def update_poll(db, current_user):
     clear_screen()
     header("UPDATE POLL", THEME_ADMIN)
-    polls = db.get_all("polls")
+    
+    from Backend.polls_management import GetAllPolls, UpdatePoll
+    from Backend.audits import LogAuditEntry
+    
+    polls_list = GetAllPolls().execute()
+    polls = {p["id"]: p for p in polls_list}
+    
     if not polls: print(); info("No polls found."); pause(); return
     print()
     for pid, poll in polls.items():
@@ -601,16 +716,26 @@ def update_poll(db, current_user):
     if ne:
         try: datetime.datetime.strptime(ne, "%Y-%m-%d"); changes["end_date"] = ne
         except ValueError: warning("Invalid date, keeping old value.")
-    if changes: db.update("polls", pid, changes)
-    db.log_action("UPDATE_POLL", current_user["username"], f"Updated poll: {changes.get('title', poll['title'])}")
-    print(); success("Poll updated!")
+        
+    if changes:
+        try:
+            UpdatePoll().execute(pid, changes)
+            LogAuditEntry().execute("POLL_UPDATED", current_user["username"], f"Updated poll: {changes.get('title', poll['title'])}")
+            print(); success("Poll updated!")
+        except Exception as e:
+            error(str(e))
     pause()
 
 
 def delete_poll(db, current_user):
     clear_screen()
     header("DELETE POLL", THEME_ADMIN)
-    polls = db.get_all("polls")
+    
+    from Backend.polls_management import GetAllPolls, DeletePoll
+    from Backend.audits import LogAuditEntry
+    polls_list = GetAllPolls().execute()
+    polls = {p["id"]: p for p in polls_list}
+    
     if not polls: print(); info("No polls found."); pause(); return
     print()
     for pid, poll in polls.items():
@@ -622,20 +747,24 @@ def delete_poll(db, current_user):
     if polls[pid]["total_votes_cast"] > 0: warning(f"This poll has {polls[pid]['total_votes_cast']} votes recorded.")
     if prompt(f"Confirm deletion of '{polls[pid]['title']}'? (yes/no): ").lower() == "yes":
         deleted_title = polls[pid]["title"]
-        db.delete("polls", pid)
-        # Remove associated votes
-        all_votes = db.get_list("votes")
-        filtered = [v for v in all_votes if v["poll_id"] != pid]
-        db.replace_list("votes", filtered)
-        db.log_action("DELETE_POLL", current_user["username"], f"Deleted poll: {deleted_title}")
-        print(); success(f"Poll '{deleted_title}' deleted.")
+        try:
+            DeletePoll().execute(pid)
+            LogAuditEntry().execute("POLL_DELETED", current_user["username"], f"Deleted poll: {deleted_title}")
+            print(); success(f"Poll '{deleted_title}' deleted.")
+        except Exception as e:
+            error(str(e))
     pause()
 
 
 def open_close_poll(db, current_user):
     clear_screen()
     header("OPEN / CLOSE POLL", THEME_ADMIN)
-    polls = db.get_all("polls")
+    
+    from Backend.polls_management import GetAllPolls, OpenPoll, ClosePoll
+    from Backend.audits import LogAuditEntry
+    polls_list = GetAllPolls().execute()
+    polls = {p["id"]: p for p in polls_list}
+    
     if not polls: print(); info("No polls found."); pause(); return
     print()
     for pid, poll in polls.items():
@@ -645,32 +774,49 @@ def open_close_poll(db, current_user):
     except ValueError: error("Invalid input."); pause(); return
     if pid not in polls: error("Poll not found."); pause(); return
     poll = polls[pid]
-    if poll["status"] == "draft":
-        if not any(pos["candidate_ids"] for pos in poll["positions"]): error("Cannot open - no candidates assigned."); pause(); return
-        if prompt(f"Open poll '{poll['title']}'? Voting will begin. (yes/no): ").lower() == "yes":
-            db.update("polls", pid, {"status": "open"})
-            db.log_action("OPEN_POLL", current_user["username"], f"Opened poll: {poll['title']}")
-            print(); success(f"Poll '{poll['title']}' is now OPEN for voting!")
-    elif poll["status"] == "open":
-        if prompt(f"Close poll '{poll['title']}'? No more votes accepted. (yes/no): ").lower() == "yes":
-            db.update("polls", pid, {"status": "closed"})
-            db.log_action("CLOSE_POLL", current_user["username"], f"Closed poll: {poll['title']}")
-            print(); success(f"Poll '{poll['title']}' is now CLOSED.")
-    elif poll["status"] == "closed":
-        info("This poll is already closed.")
-        if prompt("Reopen it? (yes/no): ").lower() == "yes":
-            db.update("polls", pid, {"status": "open"})
-            db.log_action("REOPEN_POLL", current_user["username"], f"Reopened poll: {poll['title']}")
-            print(); success("Poll reopened!")
+    
+    try:
+        if poll["status"] == "draft":
+            if prompt(f"Open poll '{poll['title']}'? Voting will begin. (yes/no): ").lower() == "yes":
+                OpenPoll().execute(pid)
+                LogAuditEntry().execute("POLL_OPENED", current_user["username"], f"Opened poll: {poll['title']}")
+                print(); success(f"Poll '{poll['title']}' is now OPEN for voting!")
+        elif poll["status"] == "open":
+            if prompt(f"Close poll '{poll['title']}'? No more votes accepted. (yes/no): ").lower() == "yes":
+                ClosePoll().execute(pid)
+                LogAuditEntry().execute("POLL_CLOSED", current_user["username"], f"Closed poll: {poll['title']}")
+                print(); success(f"Poll '{poll['title']}' is now CLOSED.")
+        elif poll["status"] == "closed":
+            info("This poll is already closed.")
+            if prompt("Reopen it? (yes/no): ").lower() == "yes":
+                from Backend.polls_management import UpdatePoll
+                UpdatePoll().execute(pid, {"status": "open"})
+                LogAuditEntry().execute("POLL_OPENED", current_user["username"], f"Reopened poll: {poll['title']}")
+                print(); success("Poll reopened!")
+    except Exception as e:
+        error(str(e))
     pause()
 
 
 def assign_candidates_to_poll(db, current_user):
     clear_screen()
     header("ASSIGN CANDIDATES TO POLL", THEME_ADMIN)
-    polls = db.get_all("polls")
-    candidates = db.get_all("candidates")
-    positions = db.get_all("positions")
+    
+    from Backend.polls_management import GetAllPolls, AssignCandidates
+    from Backend.position_management import GetAllPositions
+    from Backend.audits import LogAuditEntry
+    from Backend.storage import JsonStore
+    
+    polls_list = GetAllPolls().execute()
+    polls = {p["id"]: p for p in polls_list}
+    
+    positions_list = GetAllPositions().execute()
+    positions = {p["id"]: p for p in positions_list}
+    
+    candidate_store = JsonStore("data/candidates.json")
+    candidates_list = candidate_store.all()
+    candidates = {c["id"]: c for c in candidates_list}
+    
     if not polls: print(); info("No polls found."); pause(); return
     if not candidates: print(); info("No candidates found."); pause(); return
     print()
@@ -681,32 +827,34 @@ def assign_candidates_to_poll(db, current_user):
     if pid not in polls: error("Poll not found."); pause(); return
     poll = polls[pid]
     if poll["status"] == "open": error("Cannot modify candidates of an open poll."); pause(); return
+    
+    active_cands = {cid: c for cid, c in candidates.items() if c["is_active"] and c.get("is_approved", True)}
+    
     for i, pos in enumerate(poll["positions"]):
         subheader(f"Position: {pos['position_title']}", THEME_ADMIN_ACCENT)
         current_cands = [f"{ccid}: {candidates[ccid]['full_name']}" for ccid in pos["candidate_ids"] if ccid in candidates]
         if current_cands: print(f"  {DIM}Current:{RESET} {', '.join(current_cands)}")
         else: info("No candidates assigned yet.")
-        active_cands = {cid: c for cid, c in candidates.items() if c["is_active"] and c["is_approved"]}
+        
         pos_data = positions.get(pos["position_id"], {})
         min_age = pos_data.get("min_candidate_age", MIN_CANDIDATE_AGE)
         eligible = {cid: c for cid, c in active_cands.items() if c["age"] >= min_age}
+        
         if not eligible: info("No eligible candidates found."); continue
+        
         subheader("Available Candidates", THEME_ADMIN)
         for cid, c in eligible.items():
             marker = f" {GREEN}[ASSIGNED]{RESET}" if cid in pos["candidate_ids"] else ""
             print(f"    {THEME_ADMIN}{c['id']}.{RESET} {c['full_name']} {DIM}({c['party']}) - Age: {c['age']}, Edu: {c['education']}{RESET}{marker}")
+            
         if prompt(f"\nModify candidates for {pos['position_title']}? (yes/no): ").lower() == "yes":
             try:
                 new_cand_ids = [int(x.strip()) for x in prompt("Enter Candidate IDs (comma-separated): ").split(",")]
-                valid_ids = []
-                for ncid in new_cand_ids:
-                    if ncid in eligible: valid_ids.append(ncid)
-                    else: warning(f"Candidate {ncid} not eligible. Skipping.")
-                poll["positions"][i]["candidate_ids"] = valid_ids
-                success(f"{len(valid_ids)} candidate(s) assigned.")
-            except ValueError: error("Invalid input. Skipping this position.")
-    db.update("polls", pid, {"positions": poll["positions"]})
-    db.log_action("ASSIGN_CANDIDATES", current_user["username"], f"Updated candidates for poll: {poll['title']}")
+                AssignCandidates(set(eligible.keys())).execute(pid, pos["position_id"], new_cand_ids)
+                success("Candidate(s) assigned.")
+                LogAuditEntry().execute("CANDIDATES_ASSIGNED", current_user["username"], f"Updated candidates for poll: {poll['title']}")
+            except ValueError as e: error(f"Invalid input. {str(e)}")
+            except Exception as e: error(str(e))
     pause()
 
 
@@ -715,17 +863,20 @@ def assign_candidates_to_poll(db, current_user):
 def view_all_voters(db):
     clear_screen()
     header("ALL REGISTERED VOTERS", THEME_ADMIN)
-    voters = db.get_all("voters")
+    
+    from Backend.voters_management import GetAllVoters
+    voters = GetAllVoters().execute()
+    
     if not voters: print(); info("No voters registered."); pause(); return
     print()
     table_header(f"{'ID':<5} {'Name':<25} {'Card Number':<15} {'Stn':<6} {'Verified':<10} {'Active':<8}", THEME_ADMIN)
     table_divider(70, THEME_ADMIN)
-    for vid, v in voters.items():
+    for v in voters:
         verified = status_badge("Yes", True) if v["is_verified"] else status_badge("No", False)
         active = status_badge("Yes", True) if v["is_active"] else status_badge("No", False)
         print(f"  {v['id']:<5} {v['full_name']:<25} {v['voter_card_number']:<15} {v['station_id']:<6} {verified:<19} {active}")
-    vc = sum(1 for v in voters.values() if v["is_verified"])
-    uc = sum(1 for v in voters.values() if not v["is_verified"])
+    vc = sum(1 for v in voters if v["is_verified"])
+    uc = sum(1 for v in voters if not v["is_verified"])
     print(f"\n  {DIM}Total: {len(voters)}  │  Verified: {vc}  │  Unverified: {uc}{RESET}")
     pause()
 
@@ -733,7 +884,13 @@ def view_all_voters(db):
 def verify_voter(db, current_user):
     clear_screen()
     header("VERIFY VOTER", THEME_ADMIN)
-    voters = db.get_all("voters")
+    
+    from Backend.voters_management import GetAllVoters, VerifyVoter, VerifyAllVoters
+    from Backend.audits import LogAuditEntry
+    
+    voters_list = GetAllVoters().execute()
+    voters = {v["id"]: v for v in voters_list}
+    
     unverified = {vid: v for vid, v in voters.items() if not v["is_verified"]}
     if not unverified: print(); info("No unverified voters."); pause(); return
     subheader("Unverified Voters", THEME_ADMIN_ACCENT)
@@ -748,22 +905,32 @@ def verify_voter(db, current_user):
         except ValueError: error("Invalid input."); pause(); return
         if vid not in voters: error("Voter not found."); pause(); return
         if voters[vid]["is_verified"]: info("Already verified."); pause(); return
-        db.update("voters", vid, {"is_verified": True})
-        db.log_action("VERIFY_VOTER", current_user["username"], f"Verified voter: {voters[vid]['full_name']}")
-        print(); success(f"Voter '{voters[vid]['full_name']}' verified!")
+        
+        try:
+            VerifyVoter().execute(vid)
+            LogAuditEntry().execute("VOTER_VERIFIED", current_user["username"], f"Verified voter: {voters[vid]['full_name']}")
+            print(); success(f"Voter '{voters[vid]['full_name']}' verified!")
+        except Exception as e:
+            error(str(e))
     elif choice == "2":
-        count = 0
-        for vid in unverified:
-            db.update("voters", vid, {"is_verified": True}); count += 1
-        db.log_action("VERIFY_ALL_VOTERS", current_user["username"], f"Verified {count} voters")
-        print(); success(f"{count} voters verified!")
+        try:
+            count = VerifyAllVoters().execute()
+            LogAuditEntry().execute("ALL_VOTERS_VERIFIED", current_user["username"], f"Verified {count} voters")
+            print(); success(f"{count} voters verified!")
+        except Exception as e:
+            error(str(e))
     pause()
 
 
 def deactivate_voter(db, current_user):
     clear_screen()
     header("DEACTIVATE VOTER", THEME_ADMIN)
-    voters = db.get_all("voters")
+    
+    from Backend.voters_management import GetAllVoters, DeactivateVoter
+    from Backend.audits import LogAuditEntry
+    voters_list = GetAllVoters().execute()
+    voters = {v["id"]: v for v in voters_list}
+    
     if not voters: print(); info("No voters found."); pause(); return
     print()
     try: vid = int(prompt("Enter Voter ID to deactivate: "))
@@ -771,9 +938,12 @@ def deactivate_voter(db, current_user):
     if vid not in voters: error("Voter not found."); pause(); return
     if not voters[vid]["is_active"]: info("Already deactivated."); pause(); return
     if prompt(f"Deactivate '{voters[vid]['full_name']}'? (yes/no): ").lower() == "yes":
-        db.update("voters", vid, {"is_active": False})
-        db.log_action("DEACTIVATE_VOTER", current_user["username"], f"Deactivated voter: {voters[vid]['full_name']}")
-        print(); success("Voter deactivated.")
+        try:
+            DeactivateVoter().execute(vid)
+            LogAuditEntry().execute("VOTER_DEACTIVATED", current_user["username"], f"Deactivated voter: {voters[vid]['full_name']}")
+            print(); success("Voter deactivated.")
+        except Exception as e:
+            error(str(e))
     pause()
 
 
@@ -784,15 +954,20 @@ def search_voters(db):
     menu_item(1, "Name", THEME_ADMIN); menu_item(2, "Voter Card Number", THEME_ADMIN)
     menu_item(3, "National ID", THEME_ADMIN); menu_item(4, "Station", THEME_ADMIN)
     choice = prompt("\nChoice: ")
-    voters = db.get_all("voters")
+    
+    from Backend.voters_management import SearchVoters
+    searcher = SearchVoters()
+    
     results = []
-    if choice == "1": term = prompt("Name: ").lower(); results = [v for v in voters.values() if term in v["full_name"].lower()]
-    elif choice == "2": term = prompt("Card Number: "); results = [v for v in voters.values() if term == v["voter_card_number"]]
-    elif choice == "3": term = prompt("National ID: "); results = [v for v in voters.values() if term == v["national_id"]]
-    elif choice == "4":
-        try: sid = int(prompt("Station ID: ")); results = [v for v in voters.values() if v["station_id"] == sid]
-        except ValueError: error("Invalid input."); pause(); return
-    else: error("Invalid choice."); pause(); return
+    try:
+        if choice == "1": term = prompt("Name: "); results = searcher.execute("name", term)
+        elif choice == "2": term = prompt("Card Number: "); results = searcher.execute("card", term)
+        elif choice == "3": term = prompt("National ID: "); results = searcher.execute("national_id", term)
+        elif choice == "4": term = prompt("Station ID: "); results = searcher.execute("station", term)
+        else: error("Invalid choice."); pause(); return
+    except ValueError as e:
+        error(str(e)); pause(); return
+        
     if not results: print(); info("No voters found.")
     else:
         print(f"\n  {BOLD}Found {len(results)} voter(s):{RESET}")
@@ -811,9 +986,6 @@ def create_admin(db, current_user):
     print()
     username = prompt("Username: ")
     if not username: error("Username cannot be empty."); pause(); return
-    admins = db.get_all("admins")
-    for aid, a in admins.items():
-        if a["username"] == username: error("Username already exists."); pause(); return
     full_name = prompt("Full Name: ")
     email = prompt("Email: ")
     password = masked_input("Password: ").strip()
@@ -827,25 +999,29 @@ def create_admin(db, current_user):
     role_map = {"1": "super_admin", "2": "election_officer", "3": "station_manager", "4": "auditor"}
     if role_choice not in role_map: error("Invalid role."); pause(); return
     role = role_map[role_choice]
-    aid = db.get_next_id("admins")
-    db.insert("admins", aid, {
-        "id": aid, "username": username, "password": hash_password(password),
-        "full_name": full_name, "email": email, "role": role,
-        "created_at": str(datetime.datetime.now()), "is_active": True
-    })
-    db.log_action("CREATE_ADMIN", current_user["username"], f"Created admin: {username} (Role: {role})")
-    print(); success(f"Admin '{username}' created with role: {role}")
-    db.increment_counter("admins"); pause()
+    
+    from Backend.admin_management import CreateAdmin
+    from Backend.audits import LogAuditEntry
+    try:
+        CreateAdmin(current_user).execute(username, password, full_name, email, role)
+        LogAuditEntry().execute("CREATE_ADMIN", current_user["username"], f"Created admin: {username} (Role: {role})")
+        print(); success(f"Admin '{username}' created with role: {role}")
+    except ValueError as e:
+        error(str(e))
+    except PermissionError as e:
+        error(str(e))
+    pause()
 
 
 def view_admins(db):
     clear_screen()
     header("ALL ADMIN ACCOUNTS", THEME_ADMIN)
-    admins = db.get_all("admins")
+    from Backend.admin_management import GetAllAdmins
+    admins = GetAllAdmins().execute()
     print()
     table_header(f"{'ID':<5} {'Username':<20} {'Full Name':<25} {'Role':<20} {'Active':<8}", THEME_ADMIN)
     table_divider(78, THEME_ADMIN)
-    for aid, a in admins.items():
+    for a in admins:
         active = status_badge("Yes", True) if a["is_active"] else status_badge("No", False)
         print(f"  {a['id']:<5} {a['username']:<20} {a['full_name']:<25} {a['role']:<20} {active}")
     print(f"\n  {DIM}Total Admins: {len(admins)}{RESET}")
@@ -856,7 +1032,12 @@ def deactivate_admin(db, current_user):
     clear_screen()
     header("DEACTIVATE ADMIN", THEME_ADMIN)
     if current_user["role"] != "super_admin": print(); error("Only super admins can deactivate admins."); pause(); return
-    admins = db.get_all("admins")
+    
+    from Backend.admin_management import GetAllAdmins, DeactivateAdmin
+    from Backend.audits import LogAuditEntry
+    admins_list = GetAllAdmins().execute()
+    admins = {a["id"]: a for a in admins_list}
+    
     print()
     for aid, a in admins.items():
         active = status_badge("Active", True) if a["is_active"] else status_badge("Inactive", False)
@@ -866,7 +1047,10 @@ def deactivate_admin(db, current_user):
     if aid not in admins: error("Admin not found."); pause(); return
     if aid == current_user["id"]: error("Cannot deactivate your own account."); pause(); return
     if prompt(f"Deactivate '{admins[aid]['username']}'? (yes/no): ").lower() == "yes":
-        db.update("admins", aid, {"is_active": False})
-        db.log_action("DEACTIVATE_ADMIN", current_user["username"], f"Deactivated admin: {admins[aid]['username']}")
-        print(); success("Admin deactivated.")
+        try:
+            DeactivateAdmin(current_user).execute(aid)
+            LogAuditEntry().execute("DEACTIVATE_ADMIN", current_user["username"], f"Deactivated admin: {admins[aid]['username']}")
+            print(); success("Admin deactivated.")
+        except Exception as e:
+            error(str(e))
     pause()

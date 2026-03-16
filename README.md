@@ -2,6 +2,15 @@
 
 **Course:** Software Construction · **Program:** BsCS Year 3,2 · **Semester:** Easter 2026
 
+
+## MEMBERS 
+
+1. Nathaniel Mugenyi M24B23/027
+2. Kasule Ezra Evans S24B23/036
+3. Naddunga Carol S24B23/038
+4. Opol Charis S24B23/003 
+
+
 ---
 
 ## 1. Original Problem
@@ -29,7 +38,6 @@ E-Voting-App/
 ├── database.json                 ← Single JSON file acting as the database
 ├── Frontend/
 │   ├── main.py                   ← Entry point: login routing
-│   ├── api_engine.py             ← Database engine (data access layer)
 │   ├── auth_service.py           ← Authentication & voter registration
 │   ├── admin_dashboard.py        ← All 32 admin menu options & CRUD
 │   ├── voter_dashboard.py        ← Voter-facing features (7 options)
@@ -56,7 +64,8 @@ The monolith was split by **responsibility**. Each file handles one clearly defi
 
 | Module | Responsibility |
 |--------|---------------|
-| `api_engine.py` | All reads/writes to `database.json` |
+| `Backend/storage.py` | Generic `JsonStore` acting as the data access layer |
+| `Backend/*_management.py`| Command classes mapping to CRUD operations and enforcing invariants |
 | `auth_service.py` | Admin login, voter login, voter registration |
 | `admin_dashboard.py` | Admin menu routing + candidate/station/position/poll/voter/admin CRUD |
 | `voter_dashboard.py` | Voter menu routing + cast vote, view polls, history, profile |
@@ -67,14 +76,12 @@ No module exceeds a single, well-defined concern.
 
 ### Object-Oriented Design 
 
-The **`DatabaseEngine`** class in `api_engine.py` encapsulates all data access. It treats `database.json` top-level keys as logical "tables" and exposes CRUD methods:
+The backend heavily utilizes the **Command Pattern**. Every distinct action is its own encapsulated class (e.g., `CreatePoll`, `GetAllVoters`, `AuthenticateAdmin`). This ensures the **Single Responsibility Principle (SRP)** is met, allowing parallel logic to function without overlap. 
 
-- **Dict-tables** (candidates, voters, polls, etc.): `get_all()`, `get_by_id()`, `find()`, `insert()`, `update()`, `delete()`
-- **List-tables** (votes, audit_log): `get_list()`, `append_to_list()`, `filter_list()`, `replace_list()`
-- **Counters**: `get_next_id()`, `increment_counter()` — auto-incrementing IDs per table
-- **Audit convenience**: `log_action()` — appends timestamped entries to the audit log
+The storage layer is abstracted by the **`JsonStore`** class in `storage.py`, which handles standard queries:
+- `insert()`, `update()`, `delete()`, `all()`, `find()`, `find_one()`
 
-Internal data (`self._data`) is private. No other module reads or writes JSON files directly.
+Internal file I/O operations and database states are strictly encapsulated behind `JsonStore`, meaning the business command classes never write to files directly.
 
 ### Separation of Concerns 
 
@@ -84,19 +91,22 @@ The architecture enforces a **three-layer separation**:
 ┌─────────────────────────────────────────────┐
 │  UI Layer        ui.py, colors.py           │  ← Rendering only
 ├─────────────────────────────────────────────┤
-│  Logic Layer     admin_dashboard.py          │
-│                  voter_dashboard.py           │  ← Business rules
-│                  auth_service.py              │
-│                  stats_results.py             │
+│  Controller Layer admin_dashboard.py        │
+│                  voter_dashboard.py         │  ← Menu routing & integration
+│                  auth_service.py            │
+│                  stats_results.py           │
 ├─────────────────────────────────────────────┤
-│  Data Layer      api_engine.py               │  ← Storage only
-│                  database.json                │
+│  Logic Layer     Backend/*_management.py    │  ← Business rules & Invariants
+├─────────────────────────────────────────────┤
+│  Data Layer      Backend/storage.py         │  ← Storage only
+│                  database.json              │
 └─────────────────────────────────────────────┘
 ```
 
 - **UI layer** — `ui.py` contains only display functions (`header()`, `prompt()`, `menu_item()`, `masked_input()`). It knows nothing about data or business rules.
-- **Logic layer** — Each dashboard module calls UI functions for display and `DatabaseEngine` methods for data. It never touches the filesystem.
-- **Data layer** — `DatabaseEngine` is the sole gateway to `database.json`. Every `insert()`, `update()`, and `delete()` immediately persists to disk.
+- **Controller layer** — Each dashboard module acts as a controller, parsing logic from the UI to request logic from the backend. 
+- **Logic layer** — The `Backend` management classes enforce strict rules and invariants before executing any behavior.
+- **Data layer** — `JsonStore` is the sole gateway to `database.json`. Every CRUD operation sequentially persists state to the storage.
 
 ### Clean Code Quality 
 
@@ -119,26 +129,21 @@ The refactored application behaves **identically** to the original:
 
 **To run:** `cd Frontend && python3 main.py`
 
-## 5. How the Database Engine Works
+## 5. How the Backend Architecture Works
 
-Instead of loading the entire JSON into scattered global dictionaries, all data flows through one `DatabaseEngine` instance:
+Instead of scattered global dictionaries or heavily intertwined procedures, the frontend instantiates specific Command classes when UI events occur. 
 
 ```python
-db = DatabaseEngine("database.json")
-db.load()                                    # Load once at startup
-voters = db.get_all("voters")                # Read a "table"
-db.insert("voters", next_id, voter_record)   # Insert a record
-db.update("voters", vid, {"is_verified": True})  # Partial update
-db.log_action("VERIFY_VOTER", admin, details)    # Audit logging
+# Example of a frontend call delegating to the backend logic layer
+from Backend.voters_management import VerifyVoter
+from Backend.audits import LogAuditEntry
+
+# The backend commands execute their isolated invariants and update their isolated tables
+VerifyVoter().execute(voter_id)
+LogAuditEntry().execute("VERIFY_VOTER", admin["username"], "Verified voter via Dashboard.")
 ```
 
-This enforces that **no business logic function ever calls `open()` or `json.dump()`** — all persistence is handled by the engine.
-
-## MEMBERS 
-1. Nathaniel Mugenyi M24B23/027
-2. Kasule Ezra Evans S24B23/036
-3. Naddunga Carol S24B23/038
-4. Opol Charis S24B23/003 
+This enforces that **no business logic function ever calls `open()` or `json.dump()`** — all abstraction is handled strictly by the storage adapter, allowing code to be easily mocked and tested in isolation.
 
 ---
 

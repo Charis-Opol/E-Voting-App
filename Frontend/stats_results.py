@@ -11,10 +11,18 @@ from colors import *
 def view_poll_results(db):
     clear_screen()
     header("POLL RESULTS", THEME_ADMIN)
-    polls = db.get_all("polls")
-    voters = db.get_all("voters")
-    votes = db.get_list("votes")
-    candidates = db.get_all("candidates")
+    
+    from Backend.polls_management import GetAllPolls
+    from Backend.voters_management import GetAllVoters
+    from Backend.storage import JsonStore
+    
+    polls_list = GetAllPolls().execute()
+    polls = {p["id"]: p for p in polls_list}
+    voters_list = GetAllVoters().execute()
+    voters = {v["id"]: v for v in voters_list}
+    votes = JsonStore("data/votes.json").all()
+    candidates_list = JsonStore("data/candidates.json").all()
+    candidates = {c["id"]: c for c in candidates_list}
     if not polls: print(); info("No polls found."); pause(); return
     print()
     for pid, poll in polls.items():
@@ -56,11 +64,21 @@ def view_poll_results(db):
 def view_detailed_statistics(db):
     clear_screen()
     header("DETAILED STATISTICS", THEME_ADMIN)
-    candidates = db.get_all("candidates")
-    voters = db.get_all("voters")
-    stations = db.get_all("voting_stations")
-    polls = db.get_all("polls")
-    votes = db.get_list("votes")
+    
+    from Backend.storage import JsonStore
+    from Backend.voters_management import GetAllVoters
+    from Backend.station_management import GetAllStations
+    from Backend.polls_management import GetAllPolls
+    
+    candidates_list = JsonStore("data/candidates.json").all()
+    candidates = {c["id"]: c for c in candidates_list}
+    voters_list = GetAllVoters().execute()
+    voters = {v["id"]: v for v in voters_list}
+    stations_list = GetAllStations().execute()
+    stations = {s["id"]: s for s in stations_list}
+    polls_list = GetAllPolls().execute()
+    polls = {p["id"]: p for p in polls_list}
+    votes = JsonStore("data/votes.json").all()
     subheader("SYSTEM OVERVIEW", THEME_ADMIN_ACCENT)
     tc_count = len(candidates); ac = sum(1 for c in candidates.values() if c["is_active"])
     tv = len(voters); vv = sum(1 for v in voters.values() if v["is_verified"])
@@ -119,11 +137,21 @@ def view_detailed_statistics(db):
 def station_wise_results(db):
     clear_screen()
     header("STATION-WISE RESULTS", THEME_ADMIN)
-    polls = db.get_all("polls")
-    voters = db.get_all("voters")
-    votes = db.get_list("votes")
-    candidates = db.get_all("candidates")
-    stations = db.get_all("voting_stations")
+    
+    from Backend.polls_management import GetAllPolls
+    from Backend.voters_management import GetAllVoters
+    from Backend.storage import JsonStore
+    from Backend.station_management import GetAllStations
+    
+    polls_list = GetAllPolls().execute()
+    polls = {p["id"]: p for p in polls_list}
+    voters_list = GetAllVoters().execute()
+    voters = {v["id"]: v for v in voters_list}
+    votes = JsonStore("data/votes.json").all()
+    candidates_list = JsonStore("data/candidates.json").all()
+    candidates = {c["id"]: c for c in candidates_list}
+    stations_list = GetAllStations().execute()
+    stations = {s["id"]: s for s in stations_list}
     if not polls: print(); info("No polls found."); pause(); return
     print()
     for pid, poll in polls.items():
@@ -164,7 +192,9 @@ def station_wise_results(db):
 def view_audit_log(db):
     clear_screen()
     header("AUDIT LOG", THEME_ADMIN)
-    audit_log = db.get_list("audit_log")
+    
+    from Backend.storage import JsonStore
+    audit_log = JsonStore("data/audit_log.json").all()
     if not audit_log: print(); info("No audit records."); pause(); return
     print(f"\n  {DIM}Total Records: {len(audit_log)}{RESET}")
     subheader("Filter", THEME_ADMIN_ACCENT)

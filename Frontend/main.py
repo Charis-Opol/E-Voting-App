@@ -5,19 +5,16 @@ Matches the original e_voting_console_app.py main() function.
 import sys, os
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from api_engine import DatabaseEngine
 from auth_service import admin_login, voter_login, register_voter
 from admin_dashboard import admin_dashboard
 from voter_dashboard import voter_dashboard
 from ui import clear_screen, header, menu_item, prompt, info, error, pause
 from colors import THEME_LOGIN, RESET
 
-DATABASE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                             "..", "database.json")
 
-
-def login(db):
+def login():
     """Returns (user_dict, role_string) or (None, None)."""
     clear_screen()
     header("E-VOTING SYSTEM", THEME_LOGIN)
@@ -30,18 +27,17 @@ def login(db):
     choice = prompt("Enter choice: ")
 
     if choice == "1":
-        user = admin_login(db)
+        user = admin_login(db=None)
         return (user, "admin") if user else (None, None)
     elif choice == "2":
-        user = voter_login(db)
+        user = voter_login(db=None)
         return (user, "voter") if user else (None, None)
     elif choice == "3":
-        register_voter(db)
+        register_voter(db=None)
         return (None, None)
     elif choice == "4":
         print()
         info("Goodbye!")
-        db.save()
         sys.exit(0)
     else:
         error("Invalid choice.")
@@ -51,16 +47,14 @@ def login(db):
 
 def main():
     print(f"\n  {THEME_LOGIN}Loading E-Voting System...{RESET}")
-    db = DatabaseEngine(DATABASE_FILE)
-    db.load()
 
     while True:
-        user, role = login(db)
+        user, role = login()
         if user:
             if role == "admin":
-                admin_dashboard(db, user)
+                admin_dashboard(None, user)
             elif role == "voter":
-                voter_dashboard(db, user)
+                voter_dashboard(None, user)
 
 
 if __name__ == "__main__":

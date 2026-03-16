@@ -7,33 +7,67 @@ Every module uses this — nothing else touches the file system.
 
 import json
 import os
+import sys
+
+# Add Frontend to path to import api_engine
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "Frontend"))
+from api_engine import DatabaseEngine
+
+DATABASE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "database.json")
+
+# Global singleton engine dictionary
+_engines = {}
+
+def _get_db(engine_path: str) -> DatabaseEngine:
+    global _engines
+    if engine_path not in _engines:
+        engine = DatabaseEngine(engine_path)
+        engine.load()
+        _engines[engine_path] = engine
+    return _engines[engine_path]
 
 
 class JsonStore:
-    """Reads and writes a single JSON file that holds a list of records."""
+    """Acts as an adapter over the Frontend's DatabaseEngine."""
 
     def __init__(self, file_path: str) -> None:
-        self._file_path = file_path
-        os.makedirs(os.path.dirname(file_path), exist_ok=True)
-        if not os.path.exists(file_path):
-            self._write_all_records([])
+        basename = os.path.basename(file_path)
+        self.table_name = basename.replace(".json", "")
+        
+        # Mapping test files / backend files to api_engine tables
+        if self.table_name == "misc":
+            self.table_name = "polls"
+        elif self.table_name == "audits":
+            self.table_name = "audit_log"
+        
+        directory = os.path.dirname(file_path)
+        if "test_data" in directory:
+            db_path = os.path.join(directory, "database.json")
+            # Always force fresh load for test data in case the directory was cleared
+            engine = DatabaseEngine(db_path)
+            engine.load()
+            global _engines
+            _engines[db_path] = engine
+            self.db = engine
+        else:
+            db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "database.json")
+            self.db = _get_db(db_path)
 
-    # ── public ──────────────────────────────────────────────────────────
+    # ── public adapter ────────────────────────────────────────────────────────
 
     def all(self) -> list[dict]:
-        """Return every record in the file."""
-        return self._read_all_records()
+        """Return every record in the table as a list."""
+        data = self.db._data[self.table_name]
+        if isinstance(data, list):
+            return list(data)
+        return list(data.values())
 
     def find(self, **field_filters) -> list[dict]:
-        """Return all records where every given field matches.
-           Example: store.find(status="open")
-        """
-        all_records = self._read_all_records()
-        return [
-            record for record in all_records
-            if all(record.get(field_name) == expected_value
-                   for field_name, expected_value in field_filters.items())
-        ]
+        """Return all records where every given field matches."""
+        data = self.db._data[self.table_name]
+        if isinstance(data, list):
+            return self.db.filter_list(self.table_name, **field_filters)
+        return self.db.find(self.table_name, **field_filters)
 
     def find_one(self, **field_filters) -> dict | None:
         """Return the first matching record, or None if none found."""
@@ -42,44 +76,38 @@ class JsonStore:
 
     def insert(self, new_record: dict) -> dict:
         """Assign a new id to the record, save it, and return it."""
-        all_records = self._read_all_records()
-        new_record["id"] = self._next_available_id(all_records)
-        all_records.append(new_record)
-        self._write_all_records(all_records)
-        return new_record
+        data = self.db._data[self.table_name]
+        if isinstance(data, list):
+            record_id = max((r.get("id", 0) for r in data), default=0) + 1
+            new_record["id"] = record_id
+            self.db.append_to_list(self.table_name, new_record)
+            return new_record
+        else:
+            record_id = self.db.get_next_id(self.table_name)
+            new_record["id"] = record_id
+            self.db.insert(self.table_name, record_id, new_record)
+            self.db.increment_counter(self.table_name)
+            return new_record
 
     def update(self, record_id: int, field_changes: dict) -> dict | None:
-        """Apply field_changes to the record matching record_id.
-           Returns the updated record, or None if not found.
-        """
-        all_records = self._read_all_records()
-        for record in all_records:
-            if record["id"] == record_id:
-                record.update(field_changes)
-                self._write_all_records(all_records)
-                return record
-        return None
+        """Apply field_changes to the record matching record_id."""
+        data = self.db._data[self.table_name]
+        if isinstance(data, list):
+            for i, r in enumerate(data):
+                if r.get("id") == record_id:
+                    r.update(field_changes)
+                    self.db._persist()
+                    return r
+            return None
+        return self.db.update(self.table_name, record_id, field_changes)
 
     def delete(self, record_id: int) -> bool:
-        """Remove the record with the given id.
-           Returns True if a record was deleted, False if none matched.
-        """
-        all_records = self._read_all_records()
-        remaining_records = [r for r in all_records if r["id"] != record_id]
-        record_was_found = len(remaining_records) < len(all_records)
-        if record_was_found:
-            self._write_all_records(remaining_records)
-        return record_was_found
+        """Remove the record with the given id."""
+        data = self.db._data[self.table_name]
+        if isinstance(data, list):
+            old_len = len(data)
+            new_list = [r for r in data if r.get("id") != record_id]
+            self.db.replace_list(self.table_name, new_list)
+            return len(new_list) < old_len
+        return self.db.delete(self.table_name, record_id)
 
-    # ── private ─────────────────────────────────────────────────────────
-
-    def _read_all_records(self) -> list[dict]:
-        with open(self._file_path, "r", encoding="utf-8") as json_file:
-            return json.load(json_file)
-
-    def _write_all_records(self, records: list[dict]) -> None:
-        with open(self._file_path, "w", encoding="utf-8") as json_file:
-            json.dump(records, json_file, indent=2, default=str)
-
-    def _next_available_id(self, existing_records: list[dict]) -> int:
-        return max((record["id"] for record in existing_records), default=0) + 1

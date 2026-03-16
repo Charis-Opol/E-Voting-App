@@ -8,33 +8,32 @@ from ui import (clear_screen, header, subheader, menu_item, prompt, masked_input
                 pause, error, success, warning, info, status_badge)
 from colors import *
 
+from Backend.admin_management import AuthenticateAdmin
+from Backend.voters_management import GetAllVoters, VoterStore
+from Backend.station_management import GetAllStations
+from Backend.audits import LogAuditEntry
+
 MIN_VOTER_AGE = 18
 
-
-def admin_login(db):
+def admin_login(db=None):
     """Returns the admin dict on success, None on failure."""
     clear_screen()
     header("ADMIN LOGIN", THEME_ADMIN)
     print()
     username = prompt("Username: ")
     password = masked_input("Password: ").strip()
-    hashed = hash_password(password)
-    admins = db.get_all("admins")
-    for aid, admin in admins.items():
-        if admin["username"] == username and admin["password"] == hashed:
-            if not admin["is_active"]:
-                error("This account has been deactivated.")
-                db.log_action("LOGIN_FAILED", username, "Account deactivated")
-                pause(); return None
-            db.log_action("LOGIN", username, "Admin login successful")
-            print(); success(f"Welcome, {admin['full_name']}!")
-            pause(); return admin
-    error("Invalid credentials.")
-    db.log_action("LOGIN_FAILED", username, "Invalid admin credentials")
-    pause(); return None
+    
+    try:
+        admin = AuthenticateAdmin().execute(username, password)
+        LogAuditEntry().execute("ADMIN_LOGIN", username, "Admin login successful")
+        print(); success(f"Welcome, {admin['full_name']}!")
+        pause(); return admin
+    except ValueError as e:
+        error(str(e))
+        LogAuditEntry().execute("ADMIN_LOGIN_FAILED", username, str(e))
+        pause(); return None
 
-
-def voter_login(db):
+def voter_login(db=None):
     """Returns the voter dict on success, None on failure."""
     clear_screen()
     header("VOTER LOGIN", THEME_VOTER)
@@ -42,27 +41,28 @@ def voter_login(db):
     voter_card = prompt("Voter Card Number: ")
     password = masked_input("Password: ").strip()
     hashed = hash_password(password)
-    voters = db.get_all("voters")
-    for vid, voter in voters.items():
+    
+    voters = GetAllVoters().execute()
+    for voter in voters:
         if voter["voter_card_number"] == voter_card and voter["password"] == hashed:
             if not voter["is_active"]:
                 error("This voter account has been deactivated.")
-                db.log_action("LOGIN_FAILED", voter_card, "Voter account deactivated")
+                LogAuditEntry().execute("LOGIN_FAILED", voter_card, "Voter account deactivated")
                 pause(); return None
             if not voter["is_verified"]:
                 warning("Your voter registration has not been verified yet.")
                 info("Please contact an admin to verify your registration.")
-                db.log_action("LOGIN_FAILED", voter_card, "Voter not verified")
+                LogAuditEntry().execute("LOGIN_FAILED", voter_card, "Voter not verified")
                 pause(); return None
-            db.log_action("LOGIN", voter_card, "Voter login successful")
+            LogAuditEntry().execute("LOGIN", voter_card, "Voter login successful")
             print(); success(f"Welcome, {voter['full_name']}!")
             pause(); return voter
+            
     error("Invalid voter card number or password.")
-    db.log_action("LOGIN_FAILED", voter_card, "Invalid voter credentials")
+    LogAuditEntry().execute("LOGIN_FAILED", voter_card, "Invalid voter credentials")
     pause(); return None
 
-
-def register_voter(db):
+def register_voter(db=None):
     """Register a new voter account."""
     clear_screen()
     header("VOTER REGISTRATION", THEME_VOTER)
@@ -71,10 +71,12 @@ def register_voter(db):
     if not full_name: error("Name cannot be empty."); pause(); return
     national_id = prompt("National ID Number: ")
     if not national_id: error("National ID cannot be empty."); pause(); return
-    voters = db.get_all("voters")
-    for vid, v in voters.items():
+    
+    voters = GetAllVoters().execute()
+    for v in voters:
         if v["national_id"] == national_id:
             error("A voter with this National ID already exists."); pause(); return
+            
     dob_str = prompt("Date of Birth (YYYY-MM-DD): ")
     try:
         dob = datetime.datetime.strptime(dob_str, "%Y-%m-%d")
@@ -83,9 +85,11 @@ def register_voter(db):
             error(f"You must be at least {MIN_VOTER_AGE} years old to register."); pause(); return
     except ValueError:
         error("Invalid date format."); pause(); return
+        
     gender = prompt("Gender (M/F/Other): ").upper()
     if gender not in ["M", "F", "OTHER"]:
         error("Invalid gender selection."); pause(); return
+        
     address = prompt("Residential Address: ")
     phone = prompt("Phone Number: ")
     email = prompt("Email Address: ")
@@ -95,32 +99,38 @@ def register_voter(db):
     confirm = masked_input("Confirm Password: ").strip()
     if password != confirm:
         error("Passwords do not match."); pause(); return
-    stations = db.get_all("voting_stations")
+        
+    stations = GetAllStations().execute()
     if not stations:
         error("No voting stations available. Contact admin."); pause(); return
+        
     subheader("Available Voting Stations", THEME_VOTER)
-    for sid, s in stations.items():
+    for s in stations:
         if s["is_active"]:
-            print(f"    {BRIGHT_BLUE}{sid}.{RESET} {s['name']} {DIM}- {s['location']}{RESET}")
+            print(f"    {BRIGHT_BLUE}{s['id']}.{RESET} {s['name']} {DIM}- {s['location']}{RESET}")
+            
     try:
         station_choice = int(prompt("\nSelect your voting station ID: "))
-        if station_choice not in stations or not stations[station_choice]["is_active"]:
+        selected_station = next((st for st in stations if st["id"] == station_choice), None)
+        if not selected_station or not selected_station["is_active"]:
             error("Invalid station selection."); pause(); return
     except ValueError:
         error("Invalid input."); pause(); return
+        
     voter_card = ''.join(random.choices(string.ascii_uppercase + string.digits, k=12))
-    voter_id = db.get_next_id("voters")
+    
     voter_record = {
-        "id": voter_id, "full_name": full_name, "national_id": national_id,
+        "full_name": full_name, "national_id": national_id,
         "date_of_birth": dob_str, "age": age, "gender": gender, "address": address,
         "phone": phone, "email": email, "password": hash_password(password),
         "voter_card_number": voter_card, "station_id": station_choice,
         "is_verified": False, "is_active": True, "has_voted_in": [],
         "registered_at": str(datetime.datetime.now()), "role": "voter",
     }
-    db.insert("voters", voter_id, voter_record)
-    db.increment_counter("voters")
-    db.log_action("REGISTER", full_name, f"New voter registered with card: {voter_card}")
+    
+    VoterStore.get().insert(voter_record)
+    LogAuditEntry().execute("REGISTER", full_name, f"New voter registered with card: {voter_card}")
+    
     print()
     success("Registration successful!")
     print(f"  {BOLD}Your Voter Card Number: {BRIGHT_YELLOW}{voter_card}{RESET}")

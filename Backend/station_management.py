@@ -19,7 +19,7 @@ Classes:
 """
 
 import datetime
-from storage import JsonStore
+from .storage import JsonStore
 
 
 # ── Shared store ──────────────────────────────────────────────────────────────
@@ -31,7 +31,7 @@ class StationStore:
     @classmethod
     def get(cls) -> JsonStore:
         if cls._instance is None:
-            cls._instance = JsonStore("data/stations.json")
+            cls._instance = JsonStore("voting_stations")
         return cls._instance
 
 
