@@ -8,7 +8,7 @@ from ui import (clear_screen, header, subheader, menu_item, prompt,
 from colors import *
 
 
-def view_poll_results(db):
+def view_poll_results():
     clear_screen()
     header("POLL RESULTS", THEME_ADMIN)
     
@@ -61,7 +61,7 @@ def view_poll_results(db):
     pause()
 
 
-def view_detailed_statistics(db):
+def view_detailed_statistics():
     clear_screen()
     header("DETAILED STATISTICS", THEME_ADMIN)
     
@@ -134,7 +134,7 @@ def view_detailed_statistics(db):
     pause()
 
 
-def station_wise_results(db):
+def station_wise_results():
     clear_screen()
     header("STATION-WISE RESULTS", THEME_ADMIN)
     
@@ -189,7 +189,7 @@ def station_wise_results(db):
     pause()
 
 
-def view_audit_log(db):
+def view_audit_log():
     clear_screen()
     header("AUDIT LOG", THEME_ADMIN)
     

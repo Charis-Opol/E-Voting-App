@@ -14,7 +14,7 @@ MAX_CANDIDATE_AGE = 75
 REQUIRED_EDUCATION_LEVELS = ["Bachelor's Degree", "Master's Degree", "PhD", "Doctorate"]
 
 
-def admin_dashboard(db, current_user):
+def admin_dashboard(current_user):
     while True:
         clear_screen()
         header("ADMIN DASHBOARD", THEME_ADMIN)
@@ -68,50 +68,51 @@ def admin_dashboard(db, current_user):
         print()
         choice = prompt("Enter choice: ")
 
-        if choice == "1": create_candidate(db, current_user)
-        elif choice == "2": view_all_candidates(db)
-        elif choice == "3": update_candidate(db, current_user)
-        elif choice == "4": delete_candidate(db, current_user)
-        elif choice == "5": search_candidates(db)
-        elif choice == "6": create_voting_station(db, current_user)
-        elif choice == "7": view_all_stations(db)
-        elif choice == "8": update_station(db, current_user)
-        elif choice == "9": delete_station(db, current_user)
-        elif choice == "10": create_position(db, current_user)
-        elif choice == "11": view_positions(db)
-        elif choice == "12": update_position(db, current_user)
-        elif choice == "13": delete_position(db, current_user)
-        elif choice == "14": create_poll(db, current_user)
-        elif choice == "15": view_all_polls(db)
-        elif choice == "16": update_poll(db, current_user)
-        elif choice == "17": delete_poll(db, current_user)
-        elif choice == "18": open_close_poll(db, current_user)
-        elif choice == "19": assign_candidates_to_poll(db, current_user)
-        elif choice == "20": view_all_voters(db)
-        elif choice == "21": verify_voter(db, current_user)
-        elif choice == "22": deactivate_voter(db, current_user)
-        elif choice == "23": search_voters(db)
-        elif choice == "24": create_admin(db, current_user)
-        elif choice == "25": view_admins(db)
-        elif choice == "26": deactivate_admin(db, current_user)
+        if choice == "1": create_candidate(current_user)
+        elif choice == "2": view_all_candidates()
+        elif choice == "3": update_candidate(current_user)
+        elif choice == "4": delete_candidate(current_user)
+        elif choice == "5": search_candidates()
+        elif choice == "6": create_voting_station(current_user)
+        elif choice == "7": view_all_stations()
+        elif choice == "8": update_station(current_user)
+        elif choice == "9": delete_station(current_user)
+        elif choice == "10": create_position(current_user)
+        elif choice == "11": view_positions()
+        elif choice == "12": update_position(current_user)
+        elif choice == "13": delete_position(current_user)
+        elif choice == "14": create_poll(current_user)
+        elif choice == "15": view_all_polls()
+        elif choice == "16": update_poll(current_user)
+        elif choice == "17": delete_poll(current_user)
+        elif choice == "18": open_close_poll(current_user)
+        elif choice == "19": assign_candidates_to_poll(current_user)
+        elif choice == "20": view_all_voters()
+        elif choice == "21": verify_voter(current_user)
+        elif choice == "22": deactivate_voter(current_user)
+        elif choice == "23": search_voters()
+        elif choice == "24": create_admin(current_user)
+        elif choice == "25": view_admins()
+        elif choice == "26": deactivate_admin(current_user)
         elif choice == "27":
-            from stats_results import view_poll_results; view_poll_results(db)
+            from stats_results import view_poll_results; view_poll_results()
         elif choice == "28":
-            from stats_results import view_detailed_statistics; view_detailed_statistics(db)
+            from stats_results import view_detailed_statistics; view_detailed_statistics()
         elif choice == "29":
-            from stats_results import view_audit_log; view_audit_log(db)
+            from stats_results import view_audit_log; view_audit_log()
         elif choice == "30":
-            from stats_results import station_wise_results; station_wise_results(db)
-        elif choice == "31": db.save(); pause()
+            from stats_results import station_wise_results; station_wise_results()
+        elif choice == "31": pause()
         elif choice == "32":
-            db.log_action("LOGOUT", current_user["username"], "Admin logged out")
-            db.save(); break
+            from Backend.audits import LogAuditEntry
+            LogAuditEntry().execute("LOGOUT", current_user["username"], "Admin logged out")
+            break
         else: error("Invalid choice."); pause()
 
 
 # ── Candidate Management ──────────────────────────────────────────────────────
 
-def create_candidate(db, current_user):
+def create_candidate(current_user):
     clear_screen()
     header("CREATE NEW CANDIDATE", THEME_ADMIN)
     
@@ -173,7 +174,7 @@ def create_candidate(db, current_user):
     pause()
 
 
-def view_all_candidates(db):
+def view_all_candidates():
     clear_screen()
     header("ALL CANDIDATES", THEME_ADMIN)
     
@@ -192,7 +193,7 @@ def view_all_candidates(db):
     pause()
 
 
-def update_candidate(db, current_user):
+def update_candidate(current_user):
     clear_screen()
     header("UPDATE CANDIDATE", THEME_ADMIN)
     
@@ -236,7 +237,7 @@ def update_candidate(db, current_user):
     pause()
 
 
-def delete_candidate(db, current_user):
+def delete_candidate(current_user):
     clear_screen()
     header("DELETE CANDIDATE", THEME_ADMIN)
     
@@ -274,7 +275,7 @@ def delete_candidate(db, current_user):
     pause()
 
 
-def search_candidates(db):
+def search_candidates():
     clear_screen()
     header("SEARCH CANDIDATES", THEME_ADMIN)
     subheader("Search by", THEME_ADMIN_ACCENT)
@@ -324,7 +325,7 @@ def search_candidates(db):
 
 # ── Station Management ────────────────────────────────────────────────────────
 
-def create_voting_station(db, current_user):
+def create_voting_station(current_user):
     clear_screen()
     header("CREATE VOTING STATION", THEME_ADMIN)
     print()
@@ -361,7 +362,7 @@ def create_voting_station(db, current_user):
     pause()
 
 
-def view_all_stations(db):
+def view_all_stations():
     clear_screen()
     header("ALL VOTING STATIONS", THEME_ADMIN)
     
@@ -385,7 +386,7 @@ def view_all_stations(db):
     pause()
 
 
-def update_station(db, current_user):
+def update_station(current_user):
     clear_screen()
     header("UPDATE VOTING STATION", THEME_ADMIN)
     
@@ -430,7 +431,7 @@ def update_station(db, current_user):
     pause()
 
 
-def delete_station(db, current_user):
+def delete_station(current_user):
     clear_screen()
     header("DELETE VOTING STATION", THEME_ADMIN)
     
@@ -463,7 +464,7 @@ def delete_station(db, current_user):
 
 # ── Position Management ───────────────────────────────────────────────────────
 
-def create_position(db, current_user):
+def create_position(current_user):
     clear_screen()
     header("CREATE POSITION", THEME_ADMIN)
     print()
@@ -494,7 +495,7 @@ def create_position(db, current_user):
     pause()
 
 
-def view_positions(db):
+def view_positions():
     clear_screen()
     header("ALL POSITIONS", THEME_ADMIN)
     
@@ -512,7 +513,7 @@ def view_positions(db):
     pause()
 
 
-def update_position(db, current_user):
+def update_position(current_user):
     clear_screen()
     header("UPDATE POSITION", THEME_ADMIN)
     
@@ -553,7 +554,7 @@ def update_position(db, current_user):
     pause()
 
 
-def delete_position(db, current_user):
+def delete_position(current_user):
     clear_screen()
     header("DELETE POSITION", THEME_ADMIN)
     
@@ -584,7 +585,7 @@ def delete_position(db, current_user):
 
 # ── Poll Management ───────────────────────────────────────────────────────────
 
-def create_poll(db, current_user):
+def create_poll(current_user):
     clear_screen()
     header("CREATE POLL / ELECTION", THEME_ADMIN)
     print()
@@ -651,7 +652,7 @@ def create_poll(db, current_user):
     pause()
 
 
-def view_all_polls(db):
+def view_all_polls():
     clear_screen()
     header("ALL POLLS / ELECTIONS", THEME_ADMIN)
     
@@ -678,7 +679,7 @@ def view_all_polls(db):
     pause()
 
 
-def update_poll(db, current_user):
+def update_poll(current_user):
     clear_screen()
     header("UPDATE POLL", THEME_ADMIN)
     
@@ -727,7 +728,7 @@ def update_poll(db, current_user):
     pause()
 
 
-def delete_poll(db, current_user):
+def delete_poll(current_user):
     clear_screen()
     header("DELETE POLL", THEME_ADMIN)
     
@@ -756,7 +757,7 @@ def delete_poll(db, current_user):
     pause()
 
 
-def open_close_poll(db, current_user):
+def open_close_poll(current_user):
     clear_screen()
     header("OPEN / CLOSE POLL", THEME_ADMIN)
     
@@ -798,7 +799,7 @@ def open_close_poll(db, current_user):
     pause()
 
 
-def assign_candidates_to_poll(db, current_user):
+def assign_candidates_to_poll(current_user):
     clear_screen()
     header("ASSIGN CANDIDATES TO POLL", THEME_ADMIN)
     
@@ -860,7 +861,7 @@ def assign_candidates_to_poll(db, current_user):
 
 # ── Voter Management ──────────────────────────────────────────────────────────
 
-def view_all_voters(db):
+def view_all_voters():
     clear_screen()
     header("ALL REGISTERED VOTERS", THEME_ADMIN)
     
@@ -881,7 +882,7 @@ def view_all_voters(db):
     pause()
 
 
-def verify_voter(db, current_user):
+def verify_voter(current_user):
     clear_screen()
     header("VERIFY VOTER", THEME_ADMIN)
     
@@ -922,7 +923,7 @@ def verify_voter(db, current_user):
     pause()
 
 
-def deactivate_voter(db, current_user):
+def deactivate_voter(current_user):
     clear_screen()
     header("DEACTIVATE VOTER", THEME_ADMIN)
     
@@ -947,7 +948,7 @@ def deactivate_voter(db, current_user):
     pause()
 
 
-def search_voters(db):
+def search_voters():
     clear_screen()
     header("SEARCH VOTERS", THEME_ADMIN)
     subheader("Search by", THEME_ADMIN_ACCENT)
@@ -979,7 +980,7 @@ def search_voters(db):
 
 # ── Admin Management ──────────────────────────────────────────────────────────
 
-def create_admin(db, current_user):
+def create_admin(current_user):
     clear_screen()
     header("CREATE ADMIN ACCOUNT", THEME_ADMIN)
     if current_user["role"] != "super_admin": print(); error("Only super admins can create admin accounts."); pause(); return
@@ -1013,7 +1014,7 @@ def create_admin(db, current_user):
     pause()
 
 
-def view_admins(db):
+def view_admins():
     clear_screen()
     header("ALL ADMIN ACCOUNTS", THEME_ADMIN)
     from Backend.admin_management import GetAllAdmins
@@ -1028,7 +1029,7 @@ def view_admins(db):
     pause()
 
 
-def deactivate_admin(db, current_user):
+def deactivate_admin(current_user):
     clear_screen()
     header("DEACTIVATE ADMIN", THEME_ADMIN)
     if current_user["role"] != "super_admin": print(); error("Only super admins can deactivate admins."); pause(); return

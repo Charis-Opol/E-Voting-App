@@ -15,7 +15,7 @@ from Backend.audits import LogAuditEntry
 
 MIN_VOTER_AGE = 18
 
-def admin_login(db=None):
+def admin_login():
     """Returns the admin dict on success, None on failure."""
     clear_screen()
     header("ADMIN LOGIN", THEME_ADMIN)
@@ -33,7 +33,7 @@ def admin_login(db=None):
         LogAuditEntry().execute("ADMIN_LOGIN_FAILED", username, str(e))
         pause(); return None
 
-def voter_login(db=None):
+def voter_login():
     """Returns the voter dict on success, None on failure."""
     clear_screen()
     header("VOTER LOGIN", THEME_VOTER)
@@ -62,7 +62,7 @@ def voter_login(db=None):
     LogAuditEntry().execute("LOGIN_FAILED", voter_card, "Invalid voter credentials")
     pause(); return None
 
-def register_voter(db=None):
+def register_voter():
     """Register a new voter account."""
     clear_screen()
     header("VOTER REGISTRATION", THEME_VOTER)

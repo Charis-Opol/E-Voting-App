@@ -27,13 +27,13 @@ def login():
     choice = prompt("Enter choice: ")
 
     if choice == "1":
-        user = admin_login(db=None)
+        user = admin_login()
         return (user, "admin") if user else (None, None)
     elif choice == "2":
-        user = voter_login(db=None)
+        user = voter_login()
         return (user, "voter") if user else (None, None)
     elif choice == "3":
-        register_voter(db=None)
+        register_voter()
         return (None, None)
     elif choice == "4":
         print()

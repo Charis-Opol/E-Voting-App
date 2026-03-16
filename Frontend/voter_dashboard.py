@@ -10,7 +10,7 @@ from colors import *
 from security import hash_password
 
 
-def voter_dashboard(db, current_user):
+def voter_dashboard(current_user):
     from Backend.station_management import GetAllStations
     from Backend.audits import LogAuditEntry
     
@@ -32,19 +32,19 @@ def voter_dashboard(db, current_user):
         menu_item(7, "Logout", THEME_VOTER)
         print()
         choice = prompt("Enter choice: ")
-        if choice == "1": view_open_polls_voter(db, current_user)
-        elif choice == "2": cast_vote(db, current_user)
-        elif choice == "3": view_voting_history(db, current_user)
-        elif choice == "4": view_closed_poll_results_voter(db)
-        elif choice == "5": view_voter_profile(db, current_user)
-        elif choice == "6": change_voter_password(db, current_user)
+        if choice == "1": view_open_polls_voter(current_user)
+        elif choice == "2": cast_vote(current_user)
+        elif choice == "3": view_voting_history(current_user)
+        elif choice == "4": view_closed_poll_results_voter()
+        elif choice == "5": view_voter_profile(current_user)
+        elif choice == "6": change_voter_password(current_user)
         elif choice == "7":
             LogAuditEntry().execute("LOGOUT", current_user["voter_card_number"], "Voter logged out")
             break
         else: error("Invalid choice."); pause()
 
 
-def view_open_polls_voter(db, current_user):
+def view_open_polls_voter(current_user):
     clear_screen()
     header("OPEN POLLS", THEME_VOTER)
     
@@ -69,7 +69,7 @@ def view_open_polls_voter(db, current_user):
     pause()
 
 
-def cast_vote(db, current_user):
+def cast_vote(current_user):
     clear_screen()
     header("CAST YOUR VOTE", THEME_VOTER)
     
@@ -146,7 +146,7 @@ def cast_vote(db, current_user):
     pause()
 
 
-def view_voting_history(db, current_user):
+def view_voting_history(current_user):
     clear_screen()
     header("MY VOTING HISTORY", THEME_VOTER)
     voted_polls = current_user.get("has_voted_in", [])
@@ -173,7 +173,7 @@ def view_voting_history(db, current_user):
     pause()
 
 
-def view_closed_poll_results_voter(db):
+def view_closed_poll_results_voter():
     clear_screen()
     header("ELECTION RESULTS", THEME_VOTER)
     
@@ -210,7 +210,7 @@ def view_closed_poll_results_voter(db):
     pause()
 
 
-def view_voter_profile(db, current_user):
+def view_voter_profile(current_user):
     clear_screen()
     header("MY PROFILE", THEME_VOTER)
     v = current_user
@@ -234,7 +234,7 @@ def view_voter_profile(db, current_user):
     pause()
 
 
-def change_voter_password(db, current_user):
+def change_voter_password(current_user):
     clear_screen()
     header("CHANGE PASSWORD", THEME_VOTER)
     print()

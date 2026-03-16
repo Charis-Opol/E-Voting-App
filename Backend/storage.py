@@ -9,9 +9,7 @@ import json
 import os
 import sys
 
-# Add Frontend to path to import api_engine
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "Frontend"))
-from api_engine import DatabaseEngine
+from .api_engine import DatabaseEngine
 
 DATABASE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "database.json")
 
