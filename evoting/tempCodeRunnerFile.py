@@ -32,21 +32,14 @@ from services.admin_service     import AdminService
 from services.vote_service      import VoteService
 from services.report_service    import ReportService
 
-# UI wrappers for dashboards
-from ui.admin.candidate_ui import CandidateUI
-from ui.admin.station_ui   import StationUI
-from ui.admin.poll_ui      import PollUI
-from ui.admin.voter_ui     import VoterUI
-from ui.admin.admin_ui     import AdminUI
-from ui.admin.report_ui    import ReportUI
-
 
 def build_services(store: DataStore):
     """
-    Constructs all services, injecting the shared data store and audit log callable.
-    No service depends directly on another service.
+    Constructs all services, injecting the shared data store and audit log
+    callable. No service depends directly on another service.
     """
-    auth_svc     = AuthService(store)
+    auth_svc = AuthService(store)
+
     candidate_svc = CandidateService(store, auth_svc.log_action)
     station_svc   = StationService(store,   auth_svc.log_action)
     position_svc  = PositionService(store,  auth_svc.log_action)
@@ -59,36 +52,9 @@ def build_services(store: DataStore):
     return auth_svc, candidate_svc, station_svc, position_svc, poll_svc, voter_svc, admin_svc, vote_svc, report_svc
 
 
-def build_ui(console, services):
-    """
-    Wrap all service objects in UI layers to handle user input/output.
-    Returns a dictionary of UI objects for the dashboard.
-    """
-    (auth_svc, candidate_svc, station_svc,
-     position_svc, poll_svc, voter_svc,
-     admin_svc, vote_svc, report_svc) = services
-
-    candidate_ui = CandidateUI(candidate_svc, console)
-    station_ui   = StationUI(station_svc, console)
-    poll_ui      = PollUI(poll_svc, console)
-    voter_ui     = VoterUI(voter_svc, console)
-    admin_ui     = AdminUI(admin_svc, console)
-    report_ui    = ReportUI(poll_svc, console)
-
-    return {
-        "candidate_ui": candidate_ui,
-        "station_ui": station_ui,
-        "poll_ui": poll_ui,
-        "voter_ui": voter_ui,
-        "admin_ui": admin_ui,
-        "report_ui": report_ui,
-        "auth_svc": auth_svc
-    }
-
-
 def main():
     # Bootstrap
-    console = Console()  # Console object for all dashboards
+    console = Console()  # ✅ Console object for all dashboards
     print(f"\n  {THEME_LOGIN}Loading E-Voting System...{RESET}")
 
     store = DataStore()
@@ -96,18 +62,17 @@ def main():
     time.sleep(1)
 
     # Build services
-    services = build_services(store)
-
-    # Build UI wrappers
-    ui = build_ui(console, services)
+    (auth_svc, candidate_svc, station_svc,
+     position_svc, poll_svc, voter_svc,
+     admin_svc, vote_svc) = build_services(store)
 
     # Build login screen
-    login_screen = LoginScreen(ui["auth_svc"], store, console)
+    login_screen = LoginScreen(auth_svc, store, console)
 
     # Main application loop
     while True:
-        console.clear_screen()
-        current_user, role = login_screen.run()  # returns (user_dict, role_str)
+        console.clear_screen()  # <-- updated to use Console instance
+        current_user, role = login_screen.run()  # should return (user_dict, role_str)
 
         if not current_user:
             continue  # Invalid login — loop back
@@ -115,20 +80,19 @@ def main():
         if role == "admin":
             AdminDashboard(
                 console      = console,
-                candidate_ui = ui["candidate_ui"],
-                station_ui   = ui["station_ui"],
-                position_ui  = ui["position_ui"],
-                poll_ui      = ui["poll_ui"],
-                voter_ui     = ui["voter_ui"],
-                admin_ui     = ui["admin_ui"],
-                report_ui    = ui["report_ui"]
+                candidate_ui = candidate_svc,
+                station_ui   = station_svc,
+                poll_ui      = poll_svc,
+                voter_ui     = voter_svc,
+                admin_ui     = admin_svc,
+                report_ui    = report_svc,
             ).show()
 
         elif role == "voter":
             VoterDashboard(
                 console      = console,
-                vote_ui      = ui["vote_ui"],
-                auth_ui      = ui["auth_svc"],
+                vote_ui      = vote_svc,
+                auth_ui      = auth_svc,
                 store        = store,
                 current_user = current_user
             ).show()

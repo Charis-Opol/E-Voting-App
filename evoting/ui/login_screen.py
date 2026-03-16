@@ -5,38 +5,27 @@ then delegate to AuthService. Returns the authenticated user + role.
 """
 
 import datetime
-
-from ui.console import (
-    clear_screen, header, menu_item, prompt, masked_input, pause,
-    print_error, print_success, print_warning, print_info, subheader,
-    THEME_LOGIN, THEME_ADMIN, THEME_VOTER, BRIGHT_YELLOW, BOLD, RESET,
-    BRIGHT_BLUE, DIM,
-)
 from services.auth_service import AuthService
-
+from ui.console import Console, THEME_LOGIN, THEME_ADMIN, THEME_VOTER, BRIGHT_YELLOW
 
 class LoginScreen:
     """Handles the main entry screen: admin login, voter login, registration."""
 
-    def __init__(self, auth_service: AuthService, store):
-        self._auth  = auth_service
-        self._store = store  # needed only to display station list during registration
+    def __init__(self, auth_service: AuthService, store, console: Console):
+        self._auth = auth_service
+        self._store = store
+        self.console = console
 
     def run(self):
-        """
-        Shows the menu and processes the choice.
-        Returns (user_dict, role_str) on successful login,
-        or (None, None) to loop again.
-        """
-        clear_screen()
-        header("E-VOTING SYSTEM", THEME_LOGIN)
+        self.console.clear_screen()
+        self.console.header("E-VOTING SYSTEM", THEME_LOGIN)
         print()
-        menu_item(1, "Login as Admin",   THEME_LOGIN)
-        menu_item(2, "Login as Voter",   THEME_LOGIN)
-        menu_item(3, "Register as Voter", THEME_LOGIN)
-        menu_item(4, "Exit",             THEME_LOGIN)
+        self.console.menu_item(1, "Login as Admin",   THEME_LOGIN)
+        self.console.menu_item(2, "Login as Voter",   THEME_LOGIN)
+        self.console.menu_item(3, "Register as Voter", THEME_LOGIN)
+        self.console.menu_item(4, "Exit",             THEME_LOGIN)
         print()
-        choice = prompt("Enter choice: ")
+        choice = self.console.prompt("Enter choice: ")
 
         if choice == "1":
             return self._admin_login()
@@ -47,98 +36,93 @@ class LoginScreen:
             return None, None
         elif choice == "4":
             print()
-            print_info("Goodbye!")
+            self.console.print_info("Goodbye!")
             self._store.save()
             exit()
         else:
-            print_error("Invalid choice.")
-            pause()
+            self.console.print_error("Invalid choice.")
+            self.console.pause()
             return None, None
 
     # ── Admin login ──────────────────────────────────────────────────────────
-
     def _admin_login(self):
-        clear_screen()
-        header("ADMIN LOGIN", THEME_ADMIN)
+        self.console.clear_screen()
+        self.console.header("ADMIN LOGIN", THEME_ADMIN)
         print()
-        username = prompt("Username: ")
-        password = masked_input("Password: ").strip()
+        username = self.console.prompt("Username: ")
+        password = self.console.masked_input("Password: ").strip()
 
         user, err = self._auth.authenticate_admin(username, password)
         if user:
             print()
-            print_success(f"Welcome, {user['full_name']}!")
-            pause()
+            self.console.print_success(f"Welcome, {user['full_name']}!")
+            self.console.pause()
             return user, "admin"
-        print_error(err)
-        pause()
+        self.console.print_error(err)
+        self.console.pause()
         return None, None
 
     # ── Voter login ──────────────────────────────────────────────────────────
-
     def _voter_login(self):
-        clear_screen()
-        header("VOTER LOGIN", THEME_VOTER)
+        self.console.clear_screen()
+        self.console.header("VOTER LOGIN", THEME_VOTER)
         print()
-        voter_card = prompt("Voter Card Number: ")
-        password   = masked_input("Password: ").strip()
+        voter_card = self.console.prompt("Voter Card Number: ")
+        password   = self.console.masked_input("Password: ").strip()
 
         user, err = self._auth.authenticate_voter(voter_card, password)
         if user:
             print()
-            print_success(f"Welcome, {user['full_name']}!")
-            pause()
+            self.console.print_success(f"Welcome, {user['full_name']}!")
+            self.console.pause()
             return user, "voter"
         if err and err.startswith("WARNING:"):
-            print_warning(err[len("WARNING:"):])
-            print_info("Please contact an admin to verify your registration.")
+            self.console.print_warning(err[len("WARNING:"):])
+            self.console.print_info("Please contact an admin to verify your registration.")
         else:
-            print_error(err)
-        pause()
+            self.console.print_error(err)
+        self.console.pause()
         return None, None
 
     # ── Voter registration ───────────────────────────────────────────────────
-
     def _register_voter(self):
-        clear_screen()
-        header("VOTER REGISTRATION", THEME_VOTER)
+        self.console.clear_screen()
+        self.console.header("VOTER REGISTRATION", THEME_VOTER)
         print()
 
-        full_name   = prompt("Full Name: ")
-        national_id = prompt("National ID Number: ")
-        dob_str     = prompt("Date of Birth (YYYY-MM-DD): ")
+        full_name   = self.console.prompt("Full Name: ")
+        national_id = self.console.prompt("National ID Number: ")
+        dob_str     = self.console.prompt("Date of Birth (YYYY-MM-DD): ")
 
-        # Compute age here so we can display it in the error
         age = None
         try:
             dob = datetime.datetime.strptime(dob_str, "%Y-%m-%d")
             age = (datetime.datetime.now() - dob).days // 365
         except ValueError:
-            pass  # validation will catch this
+            pass
 
-        gender           = prompt("Gender (M/F/Other): ").upper()
-        address          = prompt("Residential Address: ")
-        phone            = prompt("Phone Number: ")
-        email            = prompt("Email Address: ")
-        password         = masked_input("Create Password: ").strip()
-        confirm_password = masked_input("Confirm Password: ").strip()
+        gender           = self.console.prompt("Gender (M/F/Other): ").upper()
+        address          = self.console.prompt("Residential Address: ")
+        phone            = self.console.prompt("Phone Number: ")
+        email            = self.console.prompt("Email Address: ")
+        password         = self.console.masked_input("Create Password: ").strip()
+        confirm_password = self.console.masked_input("Confirm Password: ").strip()
 
-        # Display stations before asking for station choice
         if not self._store.voting_stations:
-            print_error("No voting stations available. Contact admin.")
-            pause()
+            self.console.print_error("No voting stations available. Contact admin.")
+            self.console.pause()
             return
 
-        subheader("Available Voting Stations", THEME_VOTER)
+        self.console.subheader("Available Voting Stations", THEME_VOTER)
         for sid, station in self._store.voting_stations.items():
             if station["is_active"]:
-                print(f"    {BRIGHT_BLUE}{sid}.{RESET} {station['name']} {DIM}- {station['location']}{RESET}")
+                print(f"    {BRIGHT_YELLOW}{sid}.{full_name}{self.console.RESET} {station['name']} - {station['location']}")
 
         try:
-            station_id = int(prompt("\nSelect your voting station ID: "))
+            station_id = int(self.console.prompt("\nSelect your voting station ID: "))
         except ValueError:
-            print_error("Invalid input.")
-            pause()
+            self.console.print_error("Invalid input.")
+            self.console.pause()
             return
 
         ok, err = self._auth.validate_voter_registration(
@@ -146,8 +130,8 @@ class LoginScreen:
             password, confirm_password, station_id,
         )
         if not ok:
-            print_error(err)
-            pause()
+            self.console.print_error(err)
+            self.console.pause()
             return
 
         voter_card = self._auth.register_voter(
@@ -155,8 +139,8 @@ class LoginScreen:
             gender, address, phone, email, password, station_id,
         )
         print()
-        print_success("Registration successful!")
-        print(f"  {BOLD}Your Voter Card Number: {BRIGHT_YELLOW}{voter_card}{RESET}")
-        print_warning("IMPORTANT: Save this number! You need it to login.")
-        print_info("Your registration is pending admin verification.")
-        pause()
+        self.console.print_success("Registration successful!")
+        print(f"  Your Voter Card Number: {BRIGHT_YELLOW}{voter_card}{self.console.RESET}")
+        self.console.print_warning("IMPORTANT: Save this number! You need it to login.")
+        self.console.print_info("Your registration is pending admin verification.")
+        self.console.pause()

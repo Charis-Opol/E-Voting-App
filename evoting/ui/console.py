@@ -50,106 +50,43 @@ THEME_VOTER        = BRIGHT_BLUE
 THEME_VOTER_ACCENT = MAGENTA
 
 
-# ── Formatting helpers ───────────────────────────────────────────────────────
+class Console:
+    """Console wrapper for all UI outputs."""
 
-def colored(text, color):
-    return f"{color}{text}{RESET}"
+    def colored(self, text, color):
+        return f"{color}{text}{RESET}"
 
+    def print(self, text=""):
+        """Simple wrapper to allow object-style print calls."""
+        print(text)
 
-def header(title, theme_color):
-    width = 58
-    top = f"  {theme_color}{'═' * width}{RESET}"
-    mid = f"  {theme_color}{BOLD} {title.center(width - 2)} {RESET}{theme_color} {RESET}"
-    bot = f"  {theme_color}{'═' * width}{RESET}"
-    print(top)
-    print(mid)
-    print(bot)
+    def clear_screen(self):
+        """Clear the terminal screen."""
+        os.system('cls' if os.name == 'nt' else 'clear')
 
+    # ── Input/Prompt ─────────────────────────────────────────────────────────
+    def prompt(self, text):
+        """Primary method for input prompts."""
+        return input(f"  {BRIGHT_WHITE}{text}{RESET}").strip()
 
-def subheader(title, theme_color):
-    print(f"\n  {theme_color}{BOLD}▸ {title}{RESET}")
+    def input(self, text=""):
+        """Alias for prompt() to maintain compatibility with older code."""
+        return self.prompt(text)
 
+    def pause(self):
+        input(f"\n  {DIM}Press Enter to continue...{RESET}")
 
-def table_header(format_str, theme_color):
-    print(f"  {theme_color}{BOLD}{format_str}{RESET}")
-
-
-def table_divider(width, theme_color):
-    print(f"  {theme_color}{'─' * width}{RESET}")
-
-
-def print_error(msg):
-    print(f"  {RED}{BOLD} {msg}{RESET}")
-
-
-def print_success(msg):
-    print(f"  {GREEN}{BOLD} {msg}{RESET}")
-
-
-def print_warning(msg):
-    print(f"  {YELLOW}{BOLD} {msg}{RESET}")
-
-
-def print_info(msg):
-    print(f"  {GRAY}{msg}{RESET}")
-
-
-def menu_item(number, text, color):
-    print(f"  {color}{BOLD}{number:>3}.{RESET}  {text}")
-
-
-def status_badge(text, is_good):
-    if is_good:
-        return f"{GREEN}{text}{RESET}"
-    return f"{RED}{text}{RESET}"
-
-
-def prompt(text):
-    return input(f"  {BRIGHT_WHITE}{text}{RESET}").strip()
-
-
-def pause():
-    input(f"\n  {DIM}Press Enter to continue...{RESET}")
-
-
-def clear_screen():
-    os.system('cls' if os.name == 'nt' else 'clear')
-
-
-def masked_input(prompt_text="Password: "):
-    print(f"  {BRIGHT_WHITE}{prompt_text}{RESET}", end="", flush=True)
-    password = ""
-    if sys.platform == "win32":
-        import msvcrt
-        while True:
-            ch = msvcrt.getwch()
-            if ch in ("\r", "\n"):
-                print()
-                break
-            elif ch in ("\x08", "\b"):
-                if password:
-                    password = password[:-1]
-                    sys.stdout.write("\b \b")
-                    sys.stdout.flush()
-            elif ch == "\x03":
-                raise KeyboardInterrupt
-            else:
-                password += ch
-                sys.stdout.write(f"{YELLOW}*{RESET}")
-                sys.stdout.flush()
-    else:
-        import tty
-        import termios
-        fd = sys.stdin.fileno()
-        old_settings = termios.tcgetattr(fd)
-        try:
-            tty.setraw(fd)
+    def masked_input(self, prompt_text="Password: "):
+        print(f"  {BRIGHT_WHITE}{prompt_text}{RESET}", end="", flush=True)
+        password = ""
+        if sys.platform == "win32":
+            import msvcrt
             while True:
-                ch = sys.stdin.read(1)
+                ch = msvcrt.getwch()
                 if ch in ("\r", "\n"):
                     print()
                     break
-                elif ch in ("\x7f", "\x08"):
+                elif ch in ("\x08", "\b"):
                     if password:
                         password = password[:-1]
                         sys.stdout.write("\b \b")
@@ -160,6 +97,68 @@ def masked_input(prompt_text="Password: "):
                     password += ch
                     sys.stdout.write(f"{YELLOW}*{RESET}")
                     sys.stdout.flush()
-        finally:
-            termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
-    return password
+        else:
+            import tty
+            import termios
+            fd = sys.stdin.fileno()
+            old_settings = termios.tcgetattr(fd)
+            try:
+                tty.setraw(fd)
+                while True:
+                    ch = sys.stdin.read(1)
+                    if ch in ("\r", "\n"):
+                        print()
+                        break
+                    elif ch in ("\x7f", "\x08"):
+                        if password:
+                            password = password[:-1]
+                            sys.stdout.write("\b \b")
+                            sys.stdout.flush()
+                    elif ch == "\x03":
+                        raise KeyboardInterrupt
+                    else:
+                        password += ch
+                        sys.stdout.write(f"{YELLOW}*{RESET}")
+                        sys.stdout.flush()
+            finally:
+                termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+        return password
+
+    # ── Display methods ──────────────────────────────────────────────────────
+    def header(self, title, theme_color):
+        width = 58
+        top = f"  {theme_color}{'═' * width}{RESET}"
+        mid = f"  {theme_color}{BOLD} {title.center(width - 2)} {RESET}{theme_color} {RESET}"
+        bot = f"  {theme_color}{'═' * width}{RESET}"
+        self.print(top)
+        self.print(mid)
+        self.print(bot)
+
+    def subheader(self, title, theme_color):
+        self.print(f"\n  {theme_color}{BOLD}▸ {title}{RESET}")
+
+    def table_header(self, format_str, theme_color):
+        self.print(f"  {theme_color}{BOLD}{format_str}{RESET}")
+
+    def table_divider(self, width, theme_color):
+        self.print(f"  {theme_color}{'─' * width}{RESET}")
+
+    def print_error(self, msg):
+        self.print(f"  {RED}{BOLD} {msg}{RESET}")
+
+    def print_success(self, msg):
+        self.print(f"  {GREEN}{BOLD} {msg}{RESET}")
+
+    def print_warning(self, msg):
+        self.print(f"  {YELLOW}{BOLD} {msg}{RESET}")
+
+    def print_info(self, msg):
+        self.print(f"  {GRAY}{msg}{RESET}")
+
+    def menu_item(self, number, text, color):
+        self.print(f"  {color}{BOLD}{number:>3}.{RESET}  {text}")
+
+    def status_badge(self, text, is_good):
+        if is_good:
+            return f"{GREEN}{text}{RESET}"
+        return f"{RED}{text}{RESET}"
