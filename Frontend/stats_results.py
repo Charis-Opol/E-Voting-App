@@ -14,14 +14,14 @@ def view_poll_results():
     
     from Backend.polls_management import GetAllPolls
     from Backend.voters_management import GetAllVoters
-    from Backend.storage import JsonStore
+    from frontend_service import GetAllVotesService, GetAllCandidatesService
     
     polls_list = GetAllPolls().execute()
     polls = {p["id"]: p for p in polls_list}
     voters_list = GetAllVoters().execute()
     voters = {v["id"]: v for v in voters_list}
-    votes = JsonStore("data/votes.json").all()
-    candidates_list = JsonStore("data/candidates.json").all()
+    votes = GetAllVotesService().execute()
+    candidates_list = GetAllCandidatesService().execute()
     candidates = {c["id"]: c for c in candidates_list}
     if not polls: print(); info("No polls found."); pause(); return
     print()
@@ -65,20 +65,21 @@ def view_detailed_statistics():
     clear_screen()
     header("DETAILED STATISTICS", THEME_ADMIN)
     
-    from Backend.storage import JsonStore
     from Backend.voters_management import GetAllVoters
     from Backend.station_management import GetAllStations
     from Backend.polls_management import GetAllPolls
+    from frontend_service import GetAllVotesService, GetAllCandidatesService
     
-    candidates_list = JsonStore("data/candidates.json").all()
+    polls_list = GetAllPolls().execute()
+    polls = {p["id"]: p for p in polls_list}
+    
+    candidates_list = GetAllCandidatesService().execute()
     candidates = {c["id"]: c for c in candidates_list}
     voters_list = GetAllVoters().execute()
     voters = {v["id"]: v for v in voters_list}
     stations_list = GetAllStations().execute()
     stations = {s["id"]: s for s in stations_list}
-    polls_list = GetAllPolls().execute()
-    polls = {p["id"]: p for p in polls_list}
-    votes = JsonStore("data/votes.json").all()
+    votes = GetAllVotesService().execute()
     subheader("SYSTEM OVERVIEW", THEME_ADMIN_ACCENT)
     tc_count = len(candidates); ac = sum(1 for c in candidates.values() if c["is_active"])
     tv = len(voters); vv = sum(1 for v in voters.values() if v["is_verified"])
@@ -140,15 +141,18 @@ def station_wise_results():
     
     from Backend.polls_management import GetAllPolls
     from Backend.voters_management import GetAllVoters
-    from Backend.storage import JsonStore
     from Backend.station_management import GetAllStations
+    from frontend_service import GetAllVotesService, GetAllCandidatesService
     
     polls_list = GetAllPolls().execute()
     polls = {p["id"]: p for p in polls_list}
     voters_list = GetAllVoters().execute()
     voters = {v["id"]: v for v in voters_list}
-    votes = JsonStore("data/votes.json").all()
-    candidates_list = JsonStore("data/candidates.json").all()
+    
+    
+    
+    votes = GetAllVotesService().execute()
+    candidates_list = GetAllCandidatesService().execute()
     candidates = {c["id"]: c for c in candidates_list}
     stations_list = GetAllStations().execute()
     stations = {s["id"]: s for s in stations_list}
@@ -193,8 +197,9 @@ def view_audit_log():
     clear_screen()
     header("AUDIT LOG", THEME_ADMIN)
     
-    from Backend.storage import JsonStore
-    audit_log = JsonStore("data/audit_log.json").all()
+    from Backend.voters_management import GetAllVoters
+    from Backend.audits import GetAllAuditEntries
+    audit_log = GetAllAuditEntries().execute()
     if not audit_log: print(); info("No audit records."); pause(); return
     print(f"\n  {DIM}Total Records: {len(audit_log)}{RESET}")
     subheader("Filter", THEME_ADMIN_ACCENT)

@@ -113,214 +113,24 @@ def admin_dashboard(current_user):
 # ── Candidate Management ──────────────────────────────────────────────────────
 
 def create_candidate(current_user):
-    clear_screen()
-    header("CREATE NEW CANDIDATE", THEME_ADMIN)
-    
-    from Backend.storage import JsonStore
-    from Backend.audits import LogAuditEntry
-    candidate_store = JsonStore("data/candidates.json")
-    candidates = candidate_store.all()
-    
-    print()
-    full_name = prompt("Full Name: ")
-    if not full_name: error("Name cannot be empty."); pause(); return
-    national_id = prompt("National ID: ")
-    if not national_id: error("National ID cannot be empty."); pause(); return
-    for c in candidates:
-        if c["national_id"] == national_id: error("A candidate with this National ID already exists."); pause(); return
-    dob_str = prompt("Date of Birth (YYYY-MM-DD): ")
-    try:
-        dob = datetime.datetime.strptime(dob_str, "%Y-%m-%d")
-        age = (datetime.datetime.now() - dob).days // 365
-    except ValueError: error("Invalid date format."); pause(); return
-    if age < MIN_CANDIDATE_AGE: error(f"Candidate must be at least {MIN_CANDIDATE_AGE} years old. Current age: {age}"); pause(); return
-    if age > MAX_CANDIDATE_AGE: error(f"Candidate must not be older than {MAX_CANDIDATE_AGE}. Current age: {age}"); pause(); return
-    gender = prompt("Gender (M/F/Other): ").upper()
-    subheader("Education Levels", THEME_ADMIN_ACCENT)
-    for i, level in enumerate(REQUIRED_EDUCATION_LEVELS, 1):
-        print(f"    {THEME_ADMIN}{i}.{RESET} {level}")
-    try:
-        edu_choice = int(prompt("Select education level: "))
-        if edu_choice < 1 or edu_choice > len(REQUIRED_EDUCATION_LEVELS): error("Invalid choice."); pause(); return
-        education = REQUIRED_EDUCATION_LEVELS[edu_choice - 1]
-    except ValueError: error("Invalid input."); pause(); return
-    party = prompt("Political Party/Affiliation: ")
-    manifesto = prompt("Brief Manifesto/Bio: ")
-    address = prompt("Address: ")
-    phone = prompt("Phone: ")
-    email = prompt("Email: ")
-    criminal_record = prompt("Has Criminal Record? (yes/no): ").lower()
-    if criminal_record == "yes":
-        error("Candidates with criminal records are not eligible.")
-        LogAuditEntry().execute("CANDIDATE_REJECTED", current_user["username"], f"Candidate {full_name} rejected - criminal record")
-        pause(); return
-    years_experience = prompt("Years of Public Service/Political Experience: ")
-    try: years_experience = int(years_experience)
-    except ValueError: years_experience = 0
-    
-    new_candidate = {
-        "full_name": full_name, "national_id": national_id,
-        "date_of_birth": dob_str, "age": age, "gender": gender, "education": education,
-        "party": party, "manifesto": manifesto, "address": address, "phone": phone,
-        "email": email, "has_criminal_record": False, "years_experience": years_experience,
-        "is_active": True, "is_approved": True,
-        "created_at": str(datetime.datetime.now()), "created_by": current_user["username"]
-    }
-    inserted = candidate_store.insert(new_candidate)
-    cid = inserted["id"]
-    
-    LogAuditEntry().execute("CREATE_CANDIDATE", current_user["username"], f"Created candidate: {full_name} (ID: {cid})")
-    print(); success(f"Candidate '{full_name}' created successfully! ID: {cid}")
-    pause()
-
+    from Backend.candidate_management.CreateCandidateService import CandidateService
+    CandidateService.create_candidate()
 
 def view_all_candidates():
-    clear_screen()
-    header("ALL CANDIDATES", THEME_ADMIN)
-    
-    from Backend.storage import JsonStore
-    candidate_store = JsonStore("data/candidates.json")
-    candidates = candidate_store.all()
-    
-    if not candidates: print(); info("No candidates found."); pause(); return
-    print()
-    table_header(f"{'ID':<5} {'Name':<25} {'Party':<20} {'Age':<5} {'Education':<20} {'Status':<10}", THEME_ADMIN)
-    table_divider(85, THEME_ADMIN)
-    for c in candidates:
-        s = status_badge("Active", True) if c["is_active"] else status_badge("Inactive", False)
-        print(f"  {c['id']:<5} {c['full_name']:<25} {c['party']:<20} {c['age']:<5} {c['education']:<20} {s}")
-    print(f"\n  {DIM}Total Candidates: {len(candidates)}{RESET}")
-    pause()
-
+    from Backend.candidate_management.CandidateViewService import CandidateViewService
+    CandidateViewService.view_all()
 
 def update_candidate(current_user):
-    clear_screen()
-    header("UPDATE CANDIDATE", THEME_ADMIN)
-    
-    from Backend.storage import JsonStore
-    from Backend.audits import LogAuditEntry
-    candidate_store = JsonStore("data/candidates.json")
-    candidates_list = candidate_store.all()
-    candidates = {c["id"]: c for c in candidates_list}
-    
-    if not candidates: print(); info("No candidates found."); pause(); return
-    print()
-    for cid, c in candidates.items():
-        print(f"  {THEME_ADMIN}{c['id']}.{RESET} {c['full_name']} {DIM}({c['party']}){RESET}")
-    try: cid = int(prompt("\nEnter Candidate ID to update: "))
-    except ValueError: error("Invalid input."); pause(); return
-    if cid not in candidates: error("Candidate not found."); pause(); return
-    c = candidates[cid]
-    print(f"\n  {BOLD}Updating: {c['full_name']}{RESET}")
-    info("Press Enter to keep current value\n")
-    changes = {}
-    new_name = prompt(f"Full Name [{c['full_name']}]: ")
-    if new_name: changes["full_name"] = new_name
-    new_party = prompt(f"Party [{c['party']}]: ")
-    if new_party: changes["party"] = new_party
-    new_manifesto = prompt(f"Manifesto [{c['manifesto'][:50]}...]: ")
-    if new_manifesto: changes["manifesto"] = new_manifesto
-    new_phone = prompt(f"Phone [{c['phone']}]: ")
-    if new_phone: changes["phone"] = new_phone
-    new_email = prompt(f"Email [{c['email']}]: ")
-    if new_email: changes["email"] = new_email
-    new_address = prompt(f"Address [{c['address']}]: ")
-    if new_address: changes["address"] = new_address
-    new_exp = prompt(f"Years Experience [{c['years_experience']}]: ")
-    if new_exp:
-        try: changes["years_experience"] = int(new_exp)
-        except ValueError: warning("Invalid number, keeping old value.")
-    if changes: candidate_store.update(cid, changes)
-    name = changes.get("full_name", c["full_name"])
-    LogAuditEntry().execute("UPDATE_CANDIDATE", current_user["username"], f"Updated candidate: {name} (ID: {cid})")
-    print(); success(f"Candidate '{name}' updated successfully!")
-    pause()
-
+    from Backend.candidate_management.CandidateUpdateService import CandidateUpdateService
+    CandidateUpdateService.update_candidate()
 
 def delete_candidate(current_user):
-    clear_screen()
-    header("DELETE CANDIDATE", THEME_ADMIN)
-    
-    from Backend.storage import JsonStore
-    from Backend.polls_management import GetAllPolls
-    from Backend.audits import LogAuditEntry
-    
-    candidate_store = JsonStore("data/candidates.json")
-    candidates_list = candidate_store.all()
-    candidates = {c["id"]: c for c in candidates_list}
-    
-    polls_list = GetAllPolls().execute()
-    polls = {p["id"]: p for p in polls_list}
-    
-    if not candidates: print(); info("No candidates found."); pause(); return
-    print()
-    for cid, c in candidates.items():
-        s = status_badge("Active", True) if c["is_active"] else status_badge("Inactive", False)
-        print(f"  {THEME_ADMIN}{c['id']}.{RESET} {c['full_name']} {DIM}({c['party']}){RESET} {s}")
-    try: cid = int(prompt("\nEnter Candidate ID to delete: "))
-    except ValueError: error("Invalid input."); pause(); return
-    if cid not in candidates: error("Candidate not found."); pause(); return
-    for pid, poll in polls.items():
-        if poll["status"] == "open":
-            for pos in poll.get("positions", []):
-                if cid in pos.get("candidate_ids", []):
-                    error(f"Cannot delete - candidate is in active poll: {poll['title']}"); pause(); return
-    confirm = prompt(f"Are you sure you want to delete '{candidates[cid]['full_name']}'? (yes/no): ").lower()
-    if confirm == "yes":
-        deleted_name = candidates[cid]["full_name"]
-        candidate_store.update(cid, {"is_active": False})
-        LogAuditEntry().execute("DELETE_CANDIDATE", current_user["username"], f"Deactivated candidate: {deleted_name} (ID: {cid})")
-        print(); success(f"Candidate '{deleted_name}' has been deactivated.")
-    else: info("Deletion cancelled.")
-    pause()
-
+    from Backend.candidate_management.DeleteCandidateService import DeleteCandidate
+    DeleteCandidate().execute()
 
 def search_candidates():
-    clear_screen()
-    header("SEARCH CANDIDATES", THEME_ADMIN)
-    subheader("Search by", THEME_ADMIN_ACCENT)
-    menu_item(1, "Name", THEME_ADMIN)
-    menu_item(2, "Party", THEME_ADMIN)
-    menu_item(3, "Education Level", THEME_ADMIN)
-    menu_item(4, "Age Range", THEME_ADMIN)
-    choice = prompt("\nChoice: ")
-    
-    from Backend.storage import JsonStore
-    candidate_store = JsonStore("data/candidates.json")
-    candidates_list = candidate_store.all()
-    candidates = {c["id"]: c for c in candidates_list}
-    
-    results = []
-    if choice == "1":
-        term = prompt("Enter name to search: ").lower()
-        results = [c for c in candidates.values() if term in c["full_name"].lower()]
-    elif choice == "2":
-        term = prompt("Enter party name: ").lower()
-        results = [c for c in candidates.values() if term in c["party"].lower()]
-    elif choice == "3":
-        subheader("Education Levels", THEME_ADMIN_ACCENT)
-        for i, level in enumerate(REQUIRED_EDUCATION_LEVELS, 1):
-            print(f"    {THEME_ADMIN}{i}.{RESET} {level}")
-        try:
-            edu_choice = int(prompt("Select: "))
-            edu = REQUIRED_EDUCATION_LEVELS[edu_choice - 1]
-            results = [c for c in candidates.values() if c["education"] == edu]
-        except (ValueError, IndexError): error("Invalid choice."); pause(); return
-    elif choice == "4":
-        try:
-            min_age = int(prompt("Min age: "))
-            max_age = int(prompt("Max age: "))
-            results = [c for c in candidates.values() if min_age <= c["age"] <= max_age]
-        except ValueError: error("Invalid input."); pause(); return
-    else: error("Invalid choice."); pause(); return
-    if not results: print(); info("No candidates found matching your criteria.")
-    else:
-        print(f"\n  {BOLD}Found {len(results)} candidate(s):{RESET}")
-        table_header(f"{'ID':<5} {'Name':<25} {'Party':<20} {'Age':<5} {'Education':<20}", THEME_ADMIN)
-        table_divider(75, THEME_ADMIN)
-        for c in results:
-            print(f"  {c['id']:<5} {c['full_name']:<25} {c['party']:<20} {c['age']:<5} {c['education']:<20}")
-    pause()
+    from Backend.candidate_management.SearchCandidatesService import SearchCandidates
+    SearchCandidates().execute()
 
 
 # ── Station Management ────────────────────────────────────────────────────────
@@ -657,12 +467,11 @@ def view_all_polls():
     header("ALL POLLS / ELECTIONS", THEME_ADMIN)
     
     from Backend.polls_management import GetAllPolls
-    from Backend.storage import JsonStore
+    from frontend_service import GetAllCandidatesService
     polls_list = GetAllPolls().execute()
     polls = {p["id"]: p for p in polls_list}
     
-    candidate_store = JsonStore("data/candidates.json")
-    candidates_list = candidate_store.all()
+    candidates_list = GetAllCandidatesService().execute()
     candidates = {c["id"]: c for c in candidates_list}
     
     if not polls: print(); info("No polls found."); pause(); return
@@ -806,7 +615,7 @@ def assign_candidates_to_poll(current_user):
     from Backend.polls_management import GetAllPolls, AssignCandidates
     from Backend.position_management import GetAllPositions
     from Backend.audits import LogAuditEntry
-    from Backend.storage import JsonStore
+    from frontend_service import GetAllCandidatesService
     
     polls_list = GetAllPolls().execute()
     polls = {p["id"]: p for p in polls_list}
@@ -814,8 +623,7 @@ def assign_candidates_to_poll(current_user):
     positions_list = GetAllPositions().execute()
     positions = {p["id"]: p for p in positions_list}
     
-    candidate_store = JsonStore("data/candidates.json")
-    candidates_list = candidate_store.all()
+    candidates_list = GetAllCandidatesService().execute()
     candidates = {c["id"]: c for c in candidates_list}
     
     if not polls: print(); info("No polls found."); pause(); return

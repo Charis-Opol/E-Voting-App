@@ -49,9 +49,9 @@ def view_open_polls_voter(current_user):
     header("OPEN POLLS", THEME_VOTER)
     
     from Backend.polls_management import GetAllPolls
-    from Backend.storage import JsonStore
+    from frontend_service import GetAllCandidatesService
     polls = {p["id"]: p for p in GetAllPolls().execute()}
-    candidates = {c["id"]: c for c in JsonStore("data/candidates.json").all()}
+    candidates = {c["id"]: c for c in GetAllCandidatesService().execute()}
     
     open_polls = {pid: p for pid, p in polls.items() if p["status"] == "open"}
     if not open_polls: print(); info("No open polls at this time."); pause(); return
@@ -74,12 +74,12 @@ def cast_vote(current_user):
     header("CAST YOUR VOTE", THEME_VOTER)
     
     from Backend.polls_management import GetAllPolls, UpdatePoll
-    from Backend.storage import JsonStore
+    from frontend_service import GetAllCandidatesService
     from Backend.audits import LogAuditEntry
     from Backend.voters_management import UpdateVoter
     
     polls = {p["id"]: p for p in GetAllPolls().execute()}
-    candidates = {c["id"]: c for c in JsonStore("data/candidates.json").all()}
+    candidates = {c["id"]: c for c in GetAllCandidatesService().execute()}
     
     open_polls = {pid: p for pid, p in polls.items() if p["status"] == "open"}
     if not open_polls: print(); info("No open polls at this time."); pause(); return
@@ -128,15 +128,9 @@ def cast_vote(current_user):
     vote_timestamp = str(datetime.datetime.now())
     vote_hash = hashlib.sha256(f"{current_user['id']}{pid}{vote_timestamp}".encode()).hexdigest()[:16]
     
-    votes_store = JsonStore("data/votes.json")
-    for mv in my_votes:
-        votes_store.insert({"vote_id": vote_hash + str(mv["position_id"]), "poll_id": pid, "position_id": mv["position_id"], "candidate_id": mv["candidate_id"], "voter_id": current_user["id"], "station_id": current_user["station_id"], "timestamp": vote_timestamp, "abstained": mv["abstained"]})
-        
-    current_user["has_voted_in"].append(pid)
+    from frontend_service import CastVoteProcess
     try:
-        UpdateVoter().execute(current_user["id"], {"has_voted_in": current_user.get("has_voted_in", [])})
-        UpdatePoll().execute(pid, {"total_votes_cast": poll["total_votes_cast"] + 1})
-        LogAuditEntry().execute("CAST_VOTE", current_user["voter_card_number"], f"Voted in poll: {poll['title']} (Hash: {vote_hash})")
+        CastVoteProcess().execute(current_user, pid, my_votes, vote_hash, vote_timestamp)
         print()
         success("Your vote has been recorded successfully!")
         print(f"  {DIM}Vote Reference:{RESET} {BRIGHT_YELLOW}{vote_hash}{RESET}")
@@ -153,10 +147,10 @@ def view_voting_history(current_user):
     if not voted_polls: print(); info("You have not voted in any polls yet."); pause(); return
     
     from Backend.polls_management import GetAllPolls
-    from Backend.storage import JsonStore
+    from frontend_service import GetAllCandidatesService, GetAllVotesService
     polls = {p["id"]: p for p in GetAllPolls().execute()}
-    candidates = {c["id"]: c for c in JsonStore("data/candidates.json").all()}
-    votes = JsonStore("data/votes.json").all()
+    candidates = {c["id"]: c for c in GetAllCandidatesService().execute()}
+    votes = GetAllVotesService().execute()
     
     print(f"\n  {DIM}You have voted in {len(voted_polls)} poll(s):{RESET}\n")
     for pid in voted_polls:
@@ -178,11 +172,11 @@ def view_closed_poll_results_voter():
     header("ELECTION RESULTS", THEME_VOTER)
     
     from Backend.polls_management import GetAllPolls
-    from Backend.storage import JsonStore
+    from frontend_service import GetAllCandidatesService, GetAllVotesService
     polls_list = GetAllPolls().execute()
     polls = {p["id"]: p for p in polls_list}
-    votes = JsonStore("data/votes.json").all()
-    candidates_list = JsonStore("data/candidates.json").all()
+    votes = GetAllVotesService().execute()
+    candidates_list = GetAllCandidatesService().execute()
     candidates = {c["id"]: c for c in candidates_list}
     
     closed = {pid: p for pid, p in polls.items() if p["status"] == "closed"}

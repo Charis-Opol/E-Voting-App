@@ -2,18 +2,15 @@
 auth_service.py - Authentication and registration using module-level UI functions.
 Matches the exact interface of the original e_voting_console_app.py.
 """
-import random, string, datetime
-from security import hash_password
 from ui import (clear_screen, header, subheader, menu_item, prompt, masked_input,
                 pause, error, success, warning, info, status_badge)
 from colors import *
 
 from Backend.admin_management import AuthenticateAdmin
-from Backend.voters_management import GetAllVoters, VoterStore
 from Backend.station_management import GetAllStations
 from Backend.audits import LogAuditEntry
 
-MIN_VOTER_AGE = 18
+from frontend_service import AuthenticateVoter, RegisterVoterProcess
 
 def admin_login():
     """Returns the admin dict on success, None on failure."""
@@ -40,27 +37,26 @@ def voter_login():
     print()
     voter_card = prompt("Voter Card Number: ")
     password = masked_input("Password: ").strip()
-    hashed = hash_password(password)
     
-    voters = GetAllVoters().execute()
-    for voter in voters:
-        if voter["voter_card_number"] == voter_card and voter["password"] == hashed:
-            if not voter["is_active"]:
-                error("This voter account has been deactivated.")
-                LogAuditEntry().execute("LOGIN_FAILED", voter_card, "Voter account deactivated")
-                pause(); return None
-            if not voter["is_verified"]:
-                warning("Your voter registration has not been verified yet.")
-                info("Please contact an admin to verify your registration.")
-                LogAuditEntry().execute("LOGIN_FAILED", voter_card, "Voter not verified")
-                pause(); return None
-            LogAuditEntry().execute("LOGIN", voter_card, "Voter login successful")
-            print(); success(f"Welcome, {voter['full_name']}!")
-            pause(); return voter
-            
-    error("Invalid voter card number or password.")
-    LogAuditEntry().execute("LOGIN_FAILED", voter_card, "Invalid voter credentials")
-    pause(); return None
+    try:
+        voter = AuthenticateVoter().execute(voter_card, password)
+        LogAuditEntry().execute("LOGIN", voter_card, "Voter login successful")
+        print(); success(f"Welcome, {voter['full_name']}!")
+        pause(); return voter
+    except PermissionError as e:
+        err_msg = str(e)
+        if "verified" in err_msg.lower():
+            warning("Your voter registration has not been verified yet.")
+            info("Please contact an admin to verify your registration.")
+            LogAuditEntry().execute("LOGIN_FAILED", voter_card, "Voter not verified")
+        else:
+            error(err_msg)
+            LogAuditEntry().execute("LOGIN_FAILED", voter_card, "Voter account deactivated")
+        pause(); return None
+    except ValueError as e:
+        error("Invalid voter card number or password.")
+        LogAuditEntry().execute("LOGIN_FAILED", voter_card, "Invalid voter credentials")
+        pause(); return None
 
 def register_voter():
     """Register a new voter account."""
@@ -72,20 +68,7 @@ def register_voter():
     national_id = prompt("National ID Number: ")
     if not national_id: error("National ID cannot be empty."); pause(); return
     
-    voters = GetAllVoters().execute()
-    for v in voters:
-        if v["national_id"] == national_id:
-            error("A voter with this National ID already exists."); pause(); return
-            
     dob_str = prompt("Date of Birth (YYYY-MM-DD): ")
-    try:
-        dob = datetime.datetime.strptime(dob_str, "%Y-%m-%d")
-        age = (datetime.datetime.now() - dob).days // 365
-        if age < MIN_VOTER_AGE:
-            error(f"You must be at least {MIN_VOTER_AGE} years old to register."); pause(); return
-    except ValueError:
-        error("Invalid date format."); pause(); return
-        
     gender = prompt("Gender (M/F/Other): ").upper()
     if gender not in ["M", "F", "OTHER"]:
         error("Invalid gender selection."); pause(); return
@@ -94,8 +77,6 @@ def register_voter():
     phone = prompt("Phone Number: ")
     email = prompt("Email Address: ")
     password = masked_input("Create Password: ").strip()
-    if len(password) < 6:
-        error("Password must be at least 6 characters."); pause(); return
     confirm = masked_input("Confirm Password: ").strip()
     if password != confirm:
         error("Passwords do not match."); pause(); return
@@ -111,29 +92,23 @@ def register_voter():
             
     try:
         station_choice = int(prompt("\nSelect your voting station ID: "))
-        selected_station = next((st for st in stations if st["id"] == station_choice), None)
-        if not selected_station or not selected_station["is_active"]:
-            error("Invalid station selection."); pause(); return
     except ValueError:
         error("Invalid input."); pause(); return
         
-    voter_card = ''.join(random.choices(string.ascii_uppercase + string.digits, k=12))
-    
-    voter_record = {
-        "full_name": full_name, "national_id": national_id,
-        "date_of_birth": dob_str, "age": age, "gender": gender, "address": address,
-        "phone": phone, "email": email, "password": hash_password(password),
-        "voter_card_number": voter_card, "station_id": station_choice,
-        "is_verified": False, "is_active": True, "has_voted_in": [],
-        "registered_at": str(datetime.datetime.now()), "role": "voter",
-    }
-    
-    VoterStore.get().insert(voter_record)
-    LogAuditEntry().execute("REGISTER", full_name, f"New voter registered with card: {voter_card}")
-    
-    print()
-    success("Registration successful!")
-    print(f"  {BOLD}Your Voter Card Number: {BRIGHT_YELLOW}{voter_card}{RESET}")
-    warning("IMPORTANT: Save this number! You need it to login.")
-    info("Your registration is pending admin verification.")
+    try:
+        voter_record = RegisterVoterProcess().execute(
+            full_name=full_name, national_id=national_id, dob_str=dob_str,
+            gender=gender, address=address, phone=phone, email=email,
+            plain_password=password, station_id=station_choice
+        )
+        voter_card = voter_record["voter_card_number"]
+        LogAuditEntry().execute("REGISTER", full_name, f"New voter registered with card: {voter_card}")
+        
+        print()
+        success("Registration successful!")
+        print(f"  {BOLD}Your Voter Card Number: {BRIGHT_YELLOW}{voter_card}{RESET}")
+        warning("IMPORTANT: Save this number! You need it to login.")
+        info("Your registration is pending admin verification.")
+    except ValueError as e:
+        error(str(e))
     pause()

@@ -48,6 +48,10 @@ def login():
 def main():
     print(f"\n  {THEME_LOGIN}Loading E-Voting System...{RESET}")
 
+    # Initialize candidate store
+    from Backend.candidate_management.utils import PersistenceManager
+    PersistenceManager.load_data()
+
     while True:
         user, role = login()
         if user:
